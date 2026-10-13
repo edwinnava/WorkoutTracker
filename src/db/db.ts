@@ -22,7 +22,27 @@ export class WorkoutDB extends Dexie {
       settings: 'key',
       active: 'id',
     });
+    // v2: workout ids become large random numbers so ids from different devices never collide when syncing.
+    this.version(2)
+      .stores({})
+      .upgrade(async (tx) => {
+        const table = tx.table<Workout, number>('workouts');
+        const all = await table.toArray();
+        await table.clear();
+        await table.bulkAdd(all.map((w) => ({ ...w, id: newWorkoutId() })));
+      });
+    this.workouts.hook('creating', function (primKey, obj) {
+      if (primKey == null) {
+        obj.id = newWorkoutId();
+        return obj.id;
+      }
+    });
   }
+}
+
+/** Random integer id that is unique across devices (safe-integer range). */
+export function newWorkoutId(): number {
+  return Math.floor(Math.random() * 2 ** 52) + 1;
 }
 
 export const db = new WorkoutDB();

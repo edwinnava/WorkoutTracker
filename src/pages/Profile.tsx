@@ -9,9 +9,12 @@ import { fmtLongDuration, fmtNum, fmtVolume } from '../lib/units';
 import { BarChart } from '../components/Charts';
 import { IconDownload, IconTrash, IconUpload } from '../components/Icons';
 import { Sheet } from '../components/Sheet';
+import { AccountCard } from '../components/AccountCard';
+import { useAccount } from '../sync/state';
 
 export default function Profile() {
   const settings = useSettings();
+  const account = useAccount();
   const workouts = useWorkouts();
   const exMap = useExerciseMap();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -85,6 +88,8 @@ export default function Profile() {
       <div className="page-header">
         <h1 className="title">Profile</h1>
       </div>
+      <AccountCard />
+      <div style={{ height: 16 }} />
 
       <div className="stat-grid">
         <div className="stat">
@@ -237,7 +242,8 @@ export default function Profile() {
           className="list-item"
           style={{ color: 'var(--danger)' }}
           onClick={async () => {
-            if (!confirm('Delete ALL workouts, routines and custom exercises? This cannot be undone.')) return;
+            const where = account.user ? ' from this device AND your account' : '';
+            if (!confirm(`Delete ALL workouts, routines and custom exercises${where}? This cannot be undone.`)) return;
             if (!confirm('Are you absolutely sure?')) return;
             await deleteAllData();
             toast('All data deleted');
@@ -248,7 +254,9 @@ export default function Profile() {
         </button>
       </div>
       <p className="tiny faint center" style={{ marginTop: 24 }}>
-        All data is stored on this device only. Download a backup regularly.
+        {account.user
+          ? 'Your data is saved to your account automatically and kept on this device for offline use.'
+          : 'All data is stored on this device only. Sign in or download a backup regularly.'}
       </p>
 
       {summary && (

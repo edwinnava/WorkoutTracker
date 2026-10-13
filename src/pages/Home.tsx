@@ -10,6 +10,8 @@ import { suggestToday } from '../lib/suggest';
 import { fmtLongDuration, fmtVolume } from '../lib/units';
 import { IconCalendar, IconPlay, IconPlus, IconSparkle } from '../components/Icons';
 import { WorkoutCard } from './History';
+import { SignInButton, SyncBadge } from '../components/AccountCard';
+import { useAccount } from '../sync/state';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -30,6 +32,7 @@ export default function Home() {
   const workouts = useWorkouts();
   const routines = useLiveQuery(() => db.routines.orderBy('order').toArray(), []);
   const exMap = useExerciseMap();
+  const account = useAccount();
 
   const today = useMemo(
     () => (routines && workouts ? suggestToday(routines, workouts, settings) : null),
@@ -65,7 +68,17 @@ export default function Home() {
           <div className="small subtle">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
           <h1>{greeting}</h1>
         </div>
+        <SyncBadge />
       </div>
+
+      {account.configured && account.ready && !account.user && (workouts?.length ?? 0) > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="small" style={{ marginBottom: 10 }}>
+            <strong>Your workouts are only on this device.</strong> <span className="subtle">Sign in to back them up automatically.</span>
+          </div>
+          <SignInButton />
+        </div>
+      )}
 
       <div className="card">
         <div className="row small" style={{ color: 'var(--accent)', fontWeight: 600 }}>

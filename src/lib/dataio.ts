@@ -1,4 +1,10 @@
+import type { Table } from 'dexie';
 import { db, ensureSeed, getSettings, type WorkoutDB } from '../db/db';
+
+/** Deletes every row through the normal delete path so cloud sync sees the deletions (clear() bypasses hooks). */
+async function deleteAll(table: Table) {
+  await table.bulkDelete(await table.toCollection().primaryKeys());
+}
 import type { Exercise, Routine, Settings, Workout } from '../db/types';
 import { parseHevyCsv, planImport, toHevyCsv, workoutKey } from './hevy';
 
@@ -58,7 +64,7 @@ export async function restoreBackup(text: string) {
   const data = JSON.parse(text) as Backup;
   if (data.app !== 'workout-tracker') throw new Error('Not a Workout Tracker backup file.');
   await db.transaction('rw', [db.exercises, db.workouts, db.routines, db.settings], async () => {
-    await Promise.all([db.workouts.clear(), db.routines.clear(), db.exercises.clear(), db.settings.clear()]);
+    await Promise.all([deleteAll(db.workouts), deleteAll(db.routines), deleteAll(db.exercises), deleteAll(db.settings)]);
     await ensureSeed();
     await db.exercises.bulkPut(data.exercises);
     await db.workouts.bulkAdd(data.workouts.map(({ id: _id, ...w }) => w as Workout));
@@ -69,7 +75,7 @@ export async function restoreBackup(text: string) {
 
 export async function deleteAllData() {
   await db.transaction('rw', [db.exercises, db.workouts, db.routines, db.settings, db.active], async () => {
-    await Promise.all([db.workouts.clear(), db.routines.clear(), db.exercises.clear(), db.settings.clear(), db.active.clear()]);
+    await Promise.all([deleteAll(db.workouts), deleteAll(db.routines), deleteAll(db.exercises), deleteAll(db.settings), db.active.clear()]);
     await ensureSeed();
   });
 }
