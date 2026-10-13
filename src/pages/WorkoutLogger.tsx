@@ -517,7 +517,7 @@ export default function WorkoutLogger() {
       {w.restEndsAt && restLeft != null && restLeft > 0 && (
         <div className="rest-bar">
           <div className="rest-progress" style={{ width: `${(restLeft / (w.restTotal || 1)) * 100}%` }} />
-          <div>
+          <div className="rest-inner">
             <IconTimer />
             <span className="time">{fmtDuration(restLeft)}</span>
             <span className="small subtle">Rest</span>
