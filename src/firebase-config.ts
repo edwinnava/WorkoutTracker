@@ -6,12 +6,12 @@
  * Any value can be overridden with a VITE_FIREBASE_* environment variable (see .env.example).
  */
 const PROJECT = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyBauEOE2ms7UQUoBLwstsb4W34TDub_0VU',
+  authDomain: 'edwin-s-workout-trainer.firebaseapp.com',
+  projectId: 'edwin-s-workout-trainer',
+  storageBucket: 'edwin-s-workout-trainer.firebasestorage.app',
+  messagingSenderId: '802467407872',
+  appId: '1:802467407872:web:f97a24fab44ca65eabd0e5',
 };
 
 const env = import.meta.env;
