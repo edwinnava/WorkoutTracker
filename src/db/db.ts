@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { ActiveWorkout, Exercise, Routine, Settings, Workout } from './types';
 import { BUILT_IN_EXERCISES } from '../data/exercises';
+import { DEFAULT_BAR, DEFAULT_PLATES } from '../lib/plates';
 
 interface SettingsRow extends Settings {
   key: 'settings';
@@ -55,6 +56,8 @@ export const DEFAULT_SETTINGS: Settings = {
   nextPick: null,
   todayPlan: null,
   schedule: [null, null, null, null, null, null, null],
+  plates: DEFAULT_PLATES,
+  barWeight: DEFAULT_BAR,
 };
 
 /** Adds/refreshes built-in exercises. Safe to call on every startup. */

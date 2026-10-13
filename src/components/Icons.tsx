@@ -39,3 +39,4 @@ export const IconCalendar = make(<><rect x="3.5" y="5" width="17" height="15" rx
 export const IconSparkle = make(<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" />);
 export const IconCopy = make(<><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></>);
 export const IconNote = make(<><path d="M5 4h14v16H5z" /><path d="M9 9h6M9 13h6M9 17h3" /></>);
+export const IconPlate = make(<><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" /></>);

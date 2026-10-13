@@ -107,7 +107,7 @@ describe('SyncEngine', () => {
     const b = await device();
     await a.engine.start(cloud.remote(), 'u1');
     await b.engine.start(cloud.remote(), 'u1');
-    await a.db.settings.put({ key: 'settings', unit: 'kg', defaultRestSec: 60, increment: 2.5, increments: {}, nextPick: null, todayPlan: null, schedule: [null, null, null, null, null, null, null] });
+    await a.db.settings.put({ key: 'settings', unit: 'kg', defaultRestSec: 60, increment: 2.5, increments: {}, nextPick: null, todayPlan: null, schedule: [null, null, null, null, null, null, null], plates: { lbs: [45], kg: [20] }, barWeight: { lbs: 45, kg: 20 } });
     await settle();
     expect((await b.db.settings.get('settings'))?.unit).toBe('kg');
   });

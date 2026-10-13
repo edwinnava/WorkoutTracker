@@ -230,3 +230,14 @@ tr.done .cell-input { background: transparent; }
 .bar-row .track { flex: 1; height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
 .bar-row .fill { height: 100%; background: var(--accent); border-radius: 99px; }
 .bar-row .num { width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Plate calculator */
+.sets tr.plate-row td { padding: 2px 2px 6px; text-align: left; }
+.plate-btn { color: var(--accent); }
+.plate-target { font-size: 22px; font-weight: 700; text-align: center; }
+.plate-result { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; }
+.plate-viz { display: flex; align-items: center; justify-content: center; gap: 3px; height: 120px; position: relative; }
+.plate-sleeve { position: absolute; left: 8%; right: 8%; top: 50%; height: 10px; transform: translateY(-50%); background: var(--surface-3); border-radius: 4px; }
+.plate { position: relative; width: 26px; min-width: 22px; background: var(--accent); color: #fff; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; writing-mode: vertical-rl; transform: rotate(180deg); }
+.plate-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 6px; }
+.plate-badge { font-size: 15px; padding: 5px 12px; }

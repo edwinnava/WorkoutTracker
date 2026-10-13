@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db/db';
 import type { ActiveWorkout, DraftExercise, DraftSet, ExerciseType, SetType, Unit, WorkoutSet } from '../db/types';
@@ -10,12 +10,15 @@ import { distanceUnit, fmtDistance, fmtDuration, fmtLongDuration, fmtVolume, fmt
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ActionMenu, Sheet } from '../components/Sheet';
 import { ReorderSheet } from '../components/ReorderSheet';
+import { PlateCalculator } from '../components/PlateCalculator';
+import { usesPlates } from '../lib/plates';
 import {
   IconCheck,
   IconDots,
   IconDown,
   IconLink,
   IconNote,
+  IconPlate,
   IconPlus,
   IconSparkle,
   IconSwap,
@@ -103,6 +106,9 @@ export default function WorkoutLogger() {
   const [setMenu, setSetMenu] = useState<{ key: string; idx: number } | null>(null);
   const [details, setDetails] = useState(false);
   const [reordering, setReordering] = useState(false);
+  // Weight cell being edited (shows the plate calculator button) and the set the calculator is open for.
+  const [focusW, setFocusW] = useState<{ key: string; idx: number } | null>(null);
+  const [plateFor, setPlateFor] = useState<{ key: string; idx: number } | null>(null);
   const [prev, setPrev] = useState<Record<string, WorkoutSet[]>>({});
   const beeped = useRef<number | null>(null);
   useWakeLock();
@@ -348,6 +354,8 @@ export default function WorkoutLogger() {
         const info = exMap.get(ex.exerciseId);
         const type = info?.type ?? 'weight_reps';
         const prevSets = prev[ex.exerciseId] ?? [];
+        const plates = type === 'weight_reps' && usesPlates(info?.equipment);
+        const cols = 3 + [usesWeight(type), usesDistance(type), usesReps(type), usesDuration(type)].filter(Boolean).length;
         return (
           <div className="ex-block" key={ex.key}>
             <div className="ex-head">
@@ -396,8 +404,10 @@ export default function WorkoutLogger() {
               <tbody>
                 {ex.sets.map((s, i) => {
                   const p = prevSets[i];
+                  const showPlates = plates && focusW?.key === ex.key && focusW.idx === i;
                   return (
-                    <tr key={i} className={s.done ? 'done' : ''}>
+                    <Fragment key={i}>
+                    <tr className={s.done ? 'done' : ''}>
                       <td>
                         <button className={'set-num ' + s.type} onClick={() => setSetMenu({ key: ex.key, idx: i })}>
                           {setLabel(ex.sets, i)}
@@ -416,6 +426,8 @@ export default function WorkoutLogger() {
                             placeholder={s.sugWeight ?? '0'}
                             value={s.weight}
                             onChange={(e) => updateSet(ex.key, i, { weight: e.target.value })}
+                            onFocus={() => setFocusW({ key: ex.key, idx: i })}
+                            onBlur={() => setFocusW((f) => (f?.key === ex.key && f.idx === i ? null : f))}
                           />
                         </td>
                       )}
@@ -458,6 +470,25 @@ export default function WorkoutLogger() {
                         </button>
                       </td>
                     </tr>
+                    {showPlates && (
+                      <tr className="plate-row">
+                        <td colSpan={cols}>
+                          <button
+                            className="btn sm plate-btn"
+                            // Keep the input focused so this button doesn't vanish before the tap registers.
+                            onPointerDown={(e) => e.preventDefault()}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              (document.activeElement as HTMLElement | null)?.blur();
+                              setPlateFor({ key: ex.key, idx: i });
+                            }}
+                          >
+                            <IconPlate size={16} /> Plate calculator
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -593,6 +624,22 @@ export default function WorkoutLogger() {
           }
         />
       )}
+
+      {plateFor &&
+        (() => {
+          const pe = w.exercises.find((e) => e.key === plateFor.key);
+          const ps = pe?.sets[plateFor.idx];
+          if (!pe || !ps) return null;
+          return (
+            <PlateCalculator
+              initial={ps.weight || ps.sugWeight || ''}
+              unit={unit}
+              barbell={exMap.get(pe.exerciseId)?.equipment === 'barbell'}
+              onClose={() => setPlateFor(null)}
+              onUse={(weight) => updateSet(plateFor.key, plateFor.idx, { weight })}
+            />
+          );
+        })()}
 
       {details && <DetailsSheet w={w} onClose={() => setDetails(false)} onChange={(patch) => update((a) => ({ ...a, ...patch }))} />}
     </div>

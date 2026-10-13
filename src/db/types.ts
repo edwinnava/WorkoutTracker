@@ -103,6 +103,10 @@ export interface Settings {
   todayPlan: { routineId: string; day: number; exercises: RoutineExercise[] } | null;
   /** Index 0 = Sunday … 6 = Saturday. Value is a routine id, 'rest', or null (no plan). */
   schedule: (string | null)[];
+  /** Plate sizes the user owns, per unit (for the plate calculator). */
+  plates: Record<Unit, number[]>;
+  /** Barbell weight per unit (for the plate calculator). */
+  barWeight: Record<Unit, number>;
 }
 
 /* ---------- In-progress workout (draft) ---------- */
