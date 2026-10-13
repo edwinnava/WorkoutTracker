@@ -42,6 +42,24 @@ describe('progressiveOverload', () => {
     expect(r.sets[1].reps).toBe(8);
     expect(r.note).toMatch(/\+5 lbs/);
   });
+  it('jumps further when every set went well past the top of the range', () => {
+    const range = [{ type: 'normal' as const, reps: 5, repsMax: 8 }, { type: 'normal' as const, reps: 5, repsMax: 8 }];
+    const r = progressiveOverload('weight_reps', [[set(121, 12), set(121, 12)]], range, opts);
+    // 121 × 12 → about 145 for 5 reps, capped at +15% (139) → 3 jumps of 5
+    expect(toLbs(r.sets[0].weightKg)).toBe(136);
+    expect(r.sets[0].reps).toBe(5);
+    expect(r.note).toMatch(/\+15 lbs/);
+  });
+  it('uses the weakest set to size the bigger jump', () => {
+    const range = [{ type: 'normal' as const, reps: 8, repsMax: 10 }, { type: 'normal' as const, reps: 8, repsMax: 10 }];
+    const r = progressiveOverload('weight_reps', [[set(100, 14), set(100, 12)]], range, opts);
+    // weakest set 100 × 12 → ~112 for 8 reps → 2 jumps
+    expect(toLbs(r.sets[1].weightKg)).toBe(110);
+  });
+  it('keeps the normal single jump when just reaching the top of the range', () => {
+    const range = [{ type: 'normal' as const, reps: 5, repsMax: 8 }];
+    expect(toLbs(progressiveOverload('weight_reps', [[set(121, 9)]], range, opts).sets[0].weightKg)).toBe(126);
+  });
   it('uses the per-exercise jump it is given', () => {
     const r = progressiveOverload('weight_reps', [[set(20, 15), set(20, 15)]], [{ type: 'normal', reps: 12, repsMax: 15 }, { type: 'normal', reps: 12, repsMax: 15 }], { unit: 'lbs', increment: 2.5 });
     expect(toLbs(r.sets[0].weightKg)).toBe(22.5);

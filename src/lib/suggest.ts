@@ -67,6 +67,29 @@ export function isStalled(history: WorkoutSet[][], range: { max: number }): bool
   return totalReps(s0) <= totalReps(s2);
 }
 
+/** Estimated one-rep max (Epley). */
+const e1rm = (kg: number, reps: number) => kg * (1 + reps / 30);
+
+/** Biggest single jump when you blew past the rep range, as a share of the last weight. */
+const MAX_JUMP = 0.15;
+
+/**
+ * How many weight jumps to add when every working set hit the top of the range.
+ * Normally 1. When every set beat the top by 2+ reps, the weight was too light:
+ * jump toward what your reps say you can lift for the bottom of the range
+ * (from your weakest set), capped at +15% so it stays safe.
+ */
+export function jumpCount(work: WorkoutSet[], range: { min: number; max: number }, increment: number, unit: Unit): number {
+  const minReps = Math.min(...work.map((s) => s.reps ?? 0));
+  if (increment <= 0 || minReps < range.max + 2) return 1;
+  const top = Math.max(...work.map((s) => s.weightKg ?? 0));
+  if (top <= 0) return 1;
+  const est = Math.min(...work.filter((s) => (s.weightKg ?? 0) > 0).map((s) => e1rm(s.weightKg!, s.reps ?? 0)));
+  const target = Math.min(est / (1 + range.min / 30), top * (1 + MAX_JUMP));
+  const gain = toDisplayWeight(target - top, unit);
+  return Math.max(1, Math.floor(gain / increment + 1e-9));
+}
+
 function addDisplay(kg: number, deltaDisplay: number, unit: Unit) {
   const d = Math.round((toDisplayWeight(kg, unit) + deltaDisplay) * 100) / 100;
   return fromDisplayWeight(Math.max(0, d), unit);
@@ -105,6 +128,9 @@ export function progressiveOverload(
   const repsBased = weighted || assisted || type === 'reps_only';
   const allHitTop = repsBased && work.length > 0 && work.every((s) => (s.reps ?? 0) >= range.max);
   const deload = weighted && !allHitTop && isStalled(history, range);
+  // Epley only makes sense for the full load on the bar, not added/assisted bodyweight.
+  const jumps = allHitTop && type === 'weight_reps' ? jumpCount(work, range, increment, unit) : 1;
+  const jump = increment * jumps;
 
   const sets: SetSuggestion[] = [];
   for (let i = 0; i < count; i++) {
@@ -123,7 +149,7 @@ export function progressiveOverload(
     if (deload) {
       sets.push({ type: setType, weightKg: scaleRounded(prevKg, 0.9, increment, unit), reps: range.min });
     } else if (allHitTop && (weighted || assisted)) {
-      sets.push({ type: setType, weightKg: addDisplay(prevKg, assisted ? -increment : increment, unit), reps: range.min });
+      sets.push({ type: setType, weightKg: addDisplay(prevKg, assisted ? -increment : jump, unit), reps: range.min });
     } else if (type === 'reps_only') {
       sets.push({ type: setType, reps: prevReps + 1 });
     } else {
@@ -134,7 +160,10 @@ export function progressiveOverload(
   const rangeText = range.min === range.max ? `${range.min} reps` : `${range.min}–${range.max} reps`;
   let note: string | undefined;
   if (deload) note = 'No progress in 3 sessions → deload ~10% and build back up';
-  else if (allHitTop && (weighted || assisted)) note = `Hit ${range.max}+ reps on every set → ${assisted ? '−' : '+'}${fmtNum(increment)} ${unit}`;
+  else if (jumps > 1) {
+    const fewest = Math.min(...work.map((x) => x.reps ?? 0));
+    note = `${fewest}+ reps is well past ${range.max} → +${fmtNum(jump)} ${unit} to get back in range`;
+  } else if (allHitTop && (weighted || assisted)) note = `Hit ${range.max}+ reps on every set → ${assisted ? '−' : '+'}${fmtNum(increment)} ${unit}`;
   else if (type === 'reps_only') note = 'Aim for 1 more rep per set';
   else if (repsBased) note = `Aim for 1 more rep per set (${rangeText}${range.auto ? ', based on your recent sets' : ''})`;
   return { sets, note };
