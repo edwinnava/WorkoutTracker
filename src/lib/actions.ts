@@ -173,3 +173,24 @@ export async function saveWorkoutAsRoutine(w: Workout, name: string): Promise<st
   await db.routines.put(r);
   return r.id;
 }
+
+/** Swaps an exercise inside a saved routine, keeping its sets and rep targets (but not the old exercise's weights). */
+export async function replaceInRoutine(routineId: string, fromId: string, toId: string): Promise<boolean> {
+  const routine = await db.routines.get(routineId);
+  if (!routine?.exercises.some((e) => e.exerciseId === fromId)) return false;
+  await db.routines.put({
+    ...routine,
+    exercises: routine.exercises.map((e) =>
+      e.exerciseId === fromId ? { ...e, exerciseId: toId, sets: e.sets.map((s) => ({ ...s, weightKg: null })) } : e,
+    ),
+  });
+  return true;
+}
+
+/** The routine as it will actually be done today, with any edits made on the Today screen. */
+export function routineForToday(routine: Routine, todayPlan: { routineId: string; day: number; exercises: Routine['exercises'] } | null, now = Date.now()): Routine {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  if (todayPlan && todayPlan.routineId === routine.id && todayPlan.day === d.getTime()) return { ...routine, exercises: todayPlan.exercises };
+  return routine;
+}

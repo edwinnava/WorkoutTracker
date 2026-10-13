@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   increment: 5,
   increments: {},
   nextPick: null,
+  todayPlan: null,
   schedule: [null, null, null, null, null, null, null],
 };
 

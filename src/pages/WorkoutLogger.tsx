@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db/db';
 import type { ActiveWorkout, DraftExercise, DraftSet, ExerciseType, SetType, Unit, WorkoutSet } from '../db/types';
-import { discardWorkout, draftSetToSet, finishWorkout, makeDraftExercise } from '../lib/actions';
+import { discardWorkout, draftSetToSet, finishWorkout, makeDraftExercise, replaceInRoutine } from '../lib/actions';
 import { toast, useExerciseMap, useNow } from '../lib/hooks';
 import { usesDistance, usesDuration, usesReps, usesWeight } from '../lib/stats';
 import { emptyDraftSet, lastSetsFor } from '../lib/suggest';
@@ -198,10 +198,7 @@ export default function WorkoutLogger() {
         const from = exMap.get(old.exerciseId)?.name ?? 'this exercise';
         const to = exMap.get(id)?.name ?? 'the new one';
         if (confirm(`Swapped for today.\n\nAlso replace “${from}” with “${to}” in your “${routine.name}” routine for next time?`)) {
-          await db.routines.put({
-            ...routine,
-            exercises: routine.exercises.map((e) => (e.exerciseId === old.exerciseId ? { ...e, exerciseId: id, sets: e.sets.map((s) => ({ ...s, weightKg: null })) } : e)),
-          });
+          await replaceInRoutine(routine.id, old.exerciseId, id);
           toast(`Updated “${routine.name}”`);
         }
       }

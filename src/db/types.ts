@@ -99,6 +99,8 @@ export interface Settings {
    * finished after `at`; 'rest' means rest on the day it was picked.
    */
   nextPick: { routineId: string; at: number } | null;
+  /** Today-only changes to the suggested routine (swaps, removals, set counts), made before starting. */
+  todayPlan: { routineId: string; day: number; exercises: RoutineExercise[] } | null;
   /** Index 0 = Sunday … 6 = Saturday. Value is a routine id, 'rest', or null (no plan). */
   schedule: (string | null)[];
 }

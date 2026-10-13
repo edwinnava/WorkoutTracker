@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../db/db';
 import type { Routine } from '../db/types';
-import { hasActiveWorkout, startWorkout } from '../lib/actions';
+import { hasActiveWorkout, routineForToday, startWorkout } from '../lib/actions';
 import { useExerciseMap, useSettings, useWorkouts } from '../lib/hooks';
 import { startOfDay, startOfWeek, weekStreak, workoutVolume } from '../lib/stats';
 import { suggestToday } from '../lib/suggest';
@@ -13,6 +13,7 @@ import { WorkoutCard } from './History';
 import { SignInButton, SyncBadge } from '../components/AccountCard';
 import { useAccount } from '../sync/state';
 import { PlanSheet } from '../components/PlanSheet';
+import { TodayPlan } from '../components/TodayPlan';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -105,16 +106,9 @@ export default function Home() {
             <h2 style={{ marginTop: 8 }}>{routine.name}</h2>
             <p className="small subtle" style={{ margin: '4px 0 0' }}>
               {today?.kind === 'picked' ? 'You picked this' : today?.kind === 'scheduled' ? 'Scheduled for today' : 'Next in your rotation'} ·{' '}
-              {routine.exercises.length} exercises
+              {routineForToday(routine, settings.todayPlan).exercises.length} exercises · tap to adjust before you start
             </p>
-            <p className="small" style={{ margin: '8px 0 0' }}>
-              {routine.exercises
-                .slice(0, 5)
-                .map((e) => exMap.get(e.exerciseId)?.name ?? '')
-                .filter(Boolean)
-                .join(', ')}
-              {routine.exercises.length > 5 ? '…' : ''}
-            </p>
+            <TodayPlan routine={routine} settings={settings} exMap={exMap} />
           </>
         ) : (
           <>
@@ -125,7 +119,7 @@ export default function Home() {
         {doneToday && <p className="small" style={{ color: 'var(--success)', margin: '8px 0 0' }}>✓ You already trained today</p>}
         <div className="row" style={{ marginTop: 14 }}>
           {routine && today?.kind !== 'rest' && today?.kind !== 'picked-rest' ? (
-            <button className="btn primary block" onClick={() => confirmAndStart(navigate, routine)}>
+            <button className="btn primary block" onClick={() => confirmAndStart(navigate, routineForToday(routine, settings.todayPlan))}>
               <IconPlay size={16} /> Start {routine.name}
             </button>
           ) : (
@@ -192,7 +186,7 @@ export default function Home() {
           onClose={() => setPlanOpen(false)}
           onStart={(r) => {
             setPlanOpen(false);
-            confirmAndStart(navigate, r);
+            confirmAndStart(navigate, routineForToday(r, settings.todayPlan));
           }}
         />
       )}
