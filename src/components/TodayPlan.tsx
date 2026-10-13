@@ -117,8 +117,8 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
         })}
         {exercises.length === 0 && <div className="list-item small subtle">No exercises — add some below.</div>}
       </div>
-      <div className="row" style={{ marginTop: 6 }}>
-        <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => setPicker({})}>
+      <div className="plan-actions">
+        <button className="btn ghost sm" onClick={() => setPicker({})}>
           <IconPlus size={16} /> Add exercise
         </button>
         {exercises.length > 1 && (
@@ -126,9 +126,8 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
             ⇅ Reorder
           </button>
         )}
-        <div className="spacer" />
         {edited && (
-          <button className="btn ghost sm" style={{ paddingRight: 0, color: 'var(--muted)' }} onClick={() => saveSettings({ todayPlan: null })}>
+          <button className="btn ghost sm" style={{ color: 'var(--muted)' }} onClick={() => saveSettings({ todayPlan: null })}>
             Reset to routine
           </button>
         )}
