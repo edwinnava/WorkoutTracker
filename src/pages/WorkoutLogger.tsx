@@ -9,6 +9,7 @@ import { emptyDraftSet, lastSetsFor } from '../lib/suggest';
 import { distanceUnit, fmtDistance, fmtDuration, fmtLongDuration, fmtVolume, fmtWeight } from '../lib/units';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ActionMenu, Sheet } from '../components/Sheet';
+import { ReorderSheet } from '../components/ReorderSheet';
 import {
   IconCheck,
   IconDots,
@@ -101,6 +102,7 @@ export default function WorkoutLogger() {
   const [restFor, setRestFor] = useState<string | null>(null);
   const [setMenu, setSetMenu] = useState<{ key: string; idx: number } | null>(null);
   const [details, setDetails] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const [prev, setPrev] = useState<Record<string, WorkoutSet[]>>({});
   const beeped = useRef<number | null>(null);
   useWakeLock();
@@ -254,16 +256,6 @@ export default function WorkoutLogger() {
       return { ...e, sets: [...e.sets, ns] };
     });
 
-  const move = (key: string, dir: -1 | 1) =>
-    update((a) => {
-      const i = a.exercises.findIndex((e) => e.key === key);
-      const j = i + dir;
-      if (j < 0 || j >= a.exercises.length) return a;
-      const list = [...a.exercises];
-      [list[i], list[j]] = [list[j], list[i]];
-      return { ...a, exercises: list };
-    });
-
   const toggleSuperset = (key: string) =>
     update((a) => {
       const i = a.exercises.findIndex((e) => e.key === key);
@@ -314,6 +306,11 @@ export default function WorkoutLogger() {
             <IconDown />
           </button>
           <div className="spacer" />
+          {w.exercises.length > 1 && (
+            <button className="icon-btn" onClick={() => setReordering(true)} aria-label="Reorder exercises" style={{ fontSize: 20 }}>
+              ⇅
+            </button>
+          )}
           <button className="icon-btn" onClick={() => setDetails(true)} aria-label="Workout details">
             <IconTimer size={20} />
           </button>
@@ -475,6 +472,11 @@ export default function WorkoutLogger() {
       <button className="btn primary block" style={{ marginTop: 24 }} onClick={() => setPicker({})}>
         <IconPlus size={18} /> Add Exercise
       </button>
+      {w.exercises.length > 1 && (
+        <button className="btn block" style={{ marginTop: 10 }} onClick={() => setReordering(true)}>
+          ⇅ Reorder Exercises
+        </button>
+      )}
       <div className="row" style={{ marginTop: 12 }}>
         <button className="btn danger block" onClick={discard}>
           {editing ? 'Discard Changes' : 'Discard Workout'}
@@ -523,8 +525,7 @@ export default function WorkoutLogger() {
               icon: <IconLink size={20} />,
               onClick: () => toggleSuperset(menuEx.key),
             },
-            { label: 'Move up', icon: <IconUp size={20} />, onClick: () => move(menuEx.key, -1) },
-            { label: 'Move down', icon: <IconDown size={20} />, onClick: () => move(menuEx.key, 1) },
+            { label: 'Reorder exercises', icon: <IconUp size={20} />, onClick: () => setReordering(true) },
             {
               label: 'Fill suggestions into empty sets',
               icon: <IconSparkle size={20} />,
@@ -577,6 +578,19 @@ export default function WorkoutLogger() {
             label: sec === 0 ? 'Off' : fmtDuration(sec),
             onClick: () => updateEx(restFor, (e) => ({ ...e, restSec: sec })),
           }))}
+        />
+      )}
+
+      {reordering && (
+        <ReorderSheet
+          items={w.exercises.map((e) => {
+            const done = e.sets.filter((x) => x.done).length;
+            return { key: e.key, label: exMap.get(e.exerciseId)?.name ?? 'Exercise', sub: `${e.sets.length} sets${done ? ` · ${done} done` : ''}` };
+          })}
+          onClose={() => setReordering(false)}
+          onSave={(keys) =>
+            update((a) => ({ ...a, exercises: keys.map((k) => a.exercises.find((e) => e.key === k)!).filter(Boolean) }))
+          }
         />
       )}
 

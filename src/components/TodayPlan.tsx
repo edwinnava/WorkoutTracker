@@ -10,6 +10,7 @@ import { startOfDay } from '../lib/stats';
 import { ExercisePicker } from './ExercisePicker';
 import { IconDown, IconPlus, IconSparkle, IconSwap, IconTrash, IconUp, IconX } from './Icons';
 import { Sheet } from './Sheet';
+import { ReorderSheet } from './ReorderSheet';
 
 /** One-line preview of what's suggested for an exercise, e.g. "3 sets · 190 lbs × 6". */
 function summary(re: RoutineExercise, ex: Exercise | undefined, draft: ReturnType<typeof buildDraftExercise> | undefined, unit: string) {
@@ -40,6 +41,7 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
   const edited = effective !== routine;
   const [picker, setPicker] = useState<null | { replaceIdx?: number }>(null);
   const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
 
   const previews = useLiveQuery(
     () =>
@@ -119,6 +121,11 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
         <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => setPicker({})}>
           <IconPlus size={16} /> Add exercise
         </button>
+        {exercises.length > 1 && (
+          <button className="btn ghost sm" onClick={() => setReordering(true)}>
+            ⇅ Reorder
+          </button>
+        )}
         <div className="spacer" />
         {edited && (
           <button className="btn ghost sm" style={{ paddingRight: 0, color: 'var(--muted)' }} onClick={() => saveSettings({ todayPlan: null })}>
@@ -127,6 +134,17 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
         )}
       </div>
       {edited && <div className="tiny subtle">Edited for today — your “{routine.name}” routine is unchanged.</div>}
+
+      {reordering && (
+        <ReorderSheet
+          items={exercises.map((re, i) => ({ key: String(i), label: exMap.get(re.exerciseId)?.name ?? re.exerciseId, sub: summary(re, exMap.get(re.exerciseId), previews?.[i], settings.unit) }))}
+          onClose={() => setReordering(false)}
+          onSave={(keys) => {
+            const next = keys.map((k) => exercises[Number(k)]);
+            if (next.some((e, i) => e !== exercises[i])) save(next);
+          }}
+        />
+      )}
 
       {picker && (
         <ExercisePicker
