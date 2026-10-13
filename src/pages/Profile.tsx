@@ -170,7 +170,7 @@ export default function Profile() {
         </div>
         <div className="list-item">
           <div className="main">
-            Weight increment
+            Weight jump (main lifts)
             <div className="tiny subtle">Added when you hit the top of your rep range</div>
           </div>
           <select className="input" style={{ width: 110 }} value={settings.increment} onChange={(e) => saveSettings({ increment: Number(e.target.value) })}>
@@ -181,28 +181,11 @@ export default function Profile() {
             ))}
           </select>
         </div>
-        <div className="list-item">
-          <div className="main">
-            Default rep range
-            <div className="tiny subtle">Used for suggestions when a routine has none</div>
-          </div>
-          <input
-            className="input"
-            style={{ width: 52, textAlign: 'center' }}
-            inputMode="numeric"
-            value={settings.repRangeMin}
-            onChange={(e) => saveSettings({ repRangeMin: Number(e.target.value.replace(/\D/g, '')) || 1 })}
-          />
-          <span className="subtle">–</span>
-          <input
-            className="input"
-            style={{ width: 52, textAlign: 'center' }}
-            inputMode="numeric"
-            value={settings.repRangeMax}
-            onChange={(e) => saveSettings({ repRangeMax: Number(e.target.value.replace(/\D/g, '')) || 1 })}
-          />
-        </div>
       </div>
+      <p className="tiny subtle" style={{ margin: '8px 2px 0' }}>
+        Squats, deadlifts and leg presses jump double this, isolation exercises half (dumbbells never less than one dumbbell size).
+        You can set any exercise’s jump on its page in Exercises.
+      </p>
 
       <div className="section-title">Import from Hevy</div>
       <div className="card">

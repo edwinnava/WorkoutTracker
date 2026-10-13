@@ -206,12 +206,12 @@ export default function RoutineEditor() {
                     )}
                     {usesReps(type) && (
                       <td>
-                        <input className="cell-input" inputMode="numeric" placeholder={String(settings.repRangeMin)} value={s.reps} onChange={(e) => updateSet(ex.key, i, { reps: e.target.value.replace(/\D/g, '') })} />
+                        <input className="cell-input" inputMode="numeric" placeholder="auto" value={s.reps} onChange={(e) => updateSet(ex.key, i, { reps: e.target.value.replace(/\D/g, '') })} />
                       </td>
                     )}
                     {usesReps(type) && (
                       <td>
-                        <input className="cell-input" inputMode="numeric" placeholder={s.reps ? '–' : String(settings.repRangeMax)} value={s.repsMax} onChange={(e) => updateSet(ex.key, i, { repsMax: e.target.value.replace(/\D/g, '') })} />
+                        <input className="cell-input" inputMode="numeric" placeholder="–" value={s.repsMax} onChange={(e) => updateSet(ex.key, i, { repsMax: e.target.value.replace(/\D/g, '') })} />
                       </td>
                     )}
                     {usesDuration(type) && (
@@ -240,7 +240,8 @@ export default function RoutineEditor() {
       })}
 
       <p className="small subtle" style={{ marginTop: 16 }}>
-        Tip: set a rep range (e.g. 8 – 12). When you hit the max reps on every set, the next workout suggests adding {settings.increment} {unit}.
+        Tip: set a rep range (e.g. Reps 8, Max reps 12). When you hit the max on every set, the next workout suggests more weight.
+        Leave reps empty to base the range on the reps you actually do.
       </p>
       <button className="btn primary block" style={{ marginTop: 8 }} onClick={() => setPicker({})}>
         <IconPlus size={18} /> Add Exercise
@@ -249,6 +250,8 @@ export default function RoutineEditor() {
       {picker && (
         <ExercisePicker
           single={!!picker.replaceKey}
+          title={picker.replaceKey ? 'Replace Exercise' : 'Add Exercise'}
+          similarTo={picker.replaceKey ? exercises.find((e) => e.key === picker.replaceKey)?.exerciseId : undefined}
           onClose={() => setPicker(null)}
           onPick={(ids) =>
             picker.replaceKey ? updateEx(picker.replaceKey, (e) => ({ ...e, exerciseId: ids[0] })) : addExercises(ids)

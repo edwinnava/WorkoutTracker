@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../db/db';
 import type { Routine } from '../db/types';
@@ -12,6 +12,7 @@ import { IconCalendar, IconPlay, IconPlus, IconSparkle } from '../components/Ico
 import { WorkoutCard } from './History';
 import { SignInButton, SyncBadge } from '../components/AccountCard';
 import { useAccount } from '../sync/state';
+import { PlanSheet } from '../components/PlanSheet';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -33,6 +34,7 @@ export default function Home() {
   const routines = useLiveQuery(() => db.routines.orderBy('order').toArray(), []);
   const exMap = useExerciseMap();
   const account = useAccount();
+  const [planOpen, setPlanOpen] = useState(false);
 
   const today = useMemo(
     () => (routines && workouts ? suggestToday(routines, workouts, settings) : null),
@@ -83,17 +85,27 @@ export default function Home() {
       <div className="card">
         <div className="row small" style={{ color: 'var(--accent)', fontWeight: 600 }}>
           <IconSparkle size={16} /> TODAY’S WORKOUT
+          <div className="spacer" />
+          {(routines?.length ?? 0) > 0 && (
+            <button className="btn ghost sm" style={{ padding: '2px 0' }} onClick={() => setPlanOpen(true)}>
+              <IconCalendar size={16} /> See plan
+            </button>
+          )}
         </div>
-        {today?.kind === 'rest' ? (
+        {today?.kind === 'rest' || today?.kind === 'picked-rest' ? (
           <>
             <h2 style={{ marginTop: 8 }}>Rest day</h2>
-            <p className="subtle">Recovery is part of the plan. Feel like training anyway?</p>
+            <p className="subtle">
+              {today.kind === 'picked-rest' ? 'You chose to rest today.' : 'Recovery is part of the plan.'} Feel like training anyway? Tap{' '}
+              <strong>See plan</strong> to pick a workout.
+            </p>
           </>
         ) : routine ? (
           <>
             <h2 style={{ marginTop: 8 }}>{routine.name}</h2>
             <p className="small subtle" style={{ margin: '4px 0 0' }}>
-              {today?.kind === 'scheduled' ? 'Scheduled for today' : 'Next in your rotation'} · {routine.exercises.length} exercises
+              {today?.kind === 'picked' ? 'You picked this' : today?.kind === 'scheduled' ? 'Scheduled for today' : 'Next in your rotation'} ·{' '}
+              {routine.exercises.length} exercises
             </p>
             <p className="small" style={{ margin: '8px 0 0' }}>
               {routine.exercises
@@ -112,7 +124,7 @@ export default function Home() {
         )}
         {doneToday && <p className="small" style={{ color: 'var(--success)', margin: '8px 0 0' }}>✓ You already trained today</p>}
         <div className="row" style={{ marginTop: 14 }}>
-          {routine && today?.kind !== 'rest' ? (
+          {routine && today?.kind !== 'rest' && today?.kind !== 'picked-rest' ? (
             <button className="btn primary block" onClick={() => confirmAndStart(navigate, routine)}>
               <IconPlay size={16} /> Start {routine.name}
             </button>
@@ -170,6 +182,20 @@ export default function Home() {
         </div>
       )}
       {workouts?.slice(0, 3).map((w) => <WorkoutCard key={w.id} w={w} exMap={exMap} unit={settings.unit} />)}
+
+      {planOpen && routines && workouts && (
+        <PlanSheet
+          routines={routines}
+          workouts={workouts}
+          settings={settings}
+          exMap={exMap}
+          onClose={() => setPlanOpen(false)}
+          onStart={(r) => {
+            setPlanOpen(false);
+            confirmAndStart(navigate, r);
+          }}
+        />
+      )}
     </div>
   );
 }

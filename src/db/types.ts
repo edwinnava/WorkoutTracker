@@ -90,11 +90,15 @@ export type Unit = 'kg' | 'lbs';
 export interface Settings {
   unit: Unit;
   defaultRestSec: number;
-  /** Weight increment for progressive overload, in the user's unit. */
+  /** Weight jump for main lifts when progressing, in the user's unit. Other exercises scale from it. */
   increment: number;
-  /** Default rep range used for suggestions when a routine doesn't specify one. */
-  repRangeMin: number;
-  repRangeMax: number;
+  /** Per-exercise weight jump overrides, in kg (exerciseId → kg). */
+  increments: Record<string, number>;
+  /**
+   * Workout picked on the plan screen. A routine id stays "next" until a workout is
+   * finished after `at`; 'rest' means rest on the day it was picked.
+   */
+  nextPick: { routineId: string; at: number } | null;
   /** Index 0 = Sunday … 6 = Saturday. Value is a routine id, 'rest', or null (no plan). */
   schedule: (string | null)[];
 }

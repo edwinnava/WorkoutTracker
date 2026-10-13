@@ -81,17 +81,44 @@ export function ExerciseRow({ ex, selected, onClick, right }: { ex: Exercise; se
   );
 }
 
+/**
+ * Exercises that train the same thing, best matches first: same primary muscle,
+ * then overlap in secondary muscles, same logging type, and a different setup
+ * (equipment) ranked up since that's usually why you're swapping.
+ */
+export function similarExercises(id: string, all: Exercise[], limit = 8): Exercise[] {
+  const base = all.find((e) => e.id === id);
+  if (!base) return [];
+  const sec = new Set(base.secondary ?? []);
+  return all
+    .filter((e) => e.id !== id && (e.muscle === base.muscle || e.secondary?.includes(base.muscle)))
+    .map((e) => {
+      let score = e.muscle === base.muscle ? 10 : 3;
+      score += (e.secondary ?? []).filter((m) => sec.has(m)).length * 2;
+      if ((e.secondary?.length ?? 0) > 0 === sec.size > 0) score += 3; // compound ↔ compound, isolation ↔ isolation
+      if (e.type === base.type) score += 2;
+      if (e.equipment !== base.equipment) score += 1;
+      return { e, score };
+    })
+    .sort((a, b) => b.score - a.score || a.e.name.localeCompare(b.e.name))
+    .slice(0, limit)
+    .map((x) => x.e);
+}
+
 /** Multi-select exercise picker (single-select when `single`). */
 export function ExercisePicker({
   onClose,
   onPick,
   single,
   title = 'Add Exercise',
+  similarTo,
 }: {
   onClose: () => void;
   onPick: (ids: string[]) => void;
   single?: boolean;
   title?: string;
+  /** When replacing: show alternatives for this exercise first. */
+  similarTo?: string;
 }) {
   const [query, setQuery] = useState('');
   const [muscle, setMuscle] = useState<MuscleGroup | 'all'>('all');
@@ -99,6 +126,7 @@ export function ExercisePicker({
   const [selected, setSelected] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const list = useFilteredExercises(query, muscle, equipment);
+  const all = useExercises();
   const workouts = useWorkouts();
 
   const recentIds = useMemo(() => {
@@ -110,8 +138,11 @@ export function ExercisePicker({
     return ids;
   }, [workouts]);
 
-  const showRecent = !query && muscle === 'all' && equipment === 'all' && recentIds.length > 0;
   const byId = new Map(list.map((e) => [e.id, e]));
+  const similar = useMemo(() => (similarTo ? similarExercises(similarTo, all ?? []) : []), [similarTo, all]);
+  const unfiltered = !query && muscle === 'all' && equipment === 'all';
+  const showSimilar = unfiltered && similar.length > 0;
+  const showRecent = unfiltered && !showSimilar && recentIds.length > 0;
 
   const toggle = (id: string) => {
     if (single) {
@@ -166,6 +197,22 @@ export function ExercisePicker({
       </div>
       <FilterChips muscle={muscle} setMuscle={setMuscle} equipment={equipment} setEquipment={setEquipment} />
 
+      {showSimilar && (
+        <>
+          <div className="section-title">Alternatives for {all?.find((e) => e.id === similarTo)?.name}</div>
+          <div className="list">
+            {similar.map((e) => (
+              <ExerciseRow
+                key={'s' + e.id}
+                ex={e}
+                selected={selected.includes(e.id)}
+                onClick={() => toggle(e.id)}
+                right={<span className="tiny subtle">{EQUIPMENT_LABELS[e.equipment]}</span>}
+              />
+            ))}
+          </div>
+        </>
+      )}
       {showRecent && (
         <>
           <div className="section-title">Recent</div>
@@ -179,7 +226,7 @@ export function ExercisePicker({
           </div>
         </>
       )}
-      <div className="section-title">{showRecent ? 'All exercises' : `${list.length} exercises`}</div>
+      <div className="section-title">{showRecent || showSimilar ? 'All exercises' : `${list.length} exercises`}</div>
       {list.length === 0 ? (
         <div className="empty">
           <p>No exercises found.</p>

@@ -51,8 +51,8 @@ export const DEFAULT_SETTINGS: Settings = {
   unit: 'lbs',
   defaultRestSec: 90,
   increment: 5,
-  repRangeMin: 8,
-  repRangeMax: 12,
+  increments: {},
+  nextPick: null,
   schedule: [null, null, null, null, null, null, null],
 };
 

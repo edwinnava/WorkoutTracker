@@ -11,20 +11,22 @@ import {
   parseNum,
 } from './units';
 
-export async function lastWorkoutWith(exerciseId: string, beforeTime?: number): Promise<Workout | undefined> {
+/** Sets from the most recent sessions of an exercise, newest first. */
+export async function exerciseHistory(exerciseId: string, sessions = 5) {
   const list = await db.workouts.where('exerciseIds').equals(exerciseId).toArray();
   return list
-    .filter((w) => beforeTime == null || w.startTime < beforeTime)
-    .sort((a, b) => b.startTime - a.startTime)[0];
+    .sort((a, b) => b.startTime - a.startTime)
+    .slice(0, sessions)
+    .map((w) => lastSetsFor(w, exerciseId));
 }
 
 export async function makeDraftExercise(exerciseId: string, routineEx?: Routine['exercises'][number]): Promise<DraftExercise> {
-  const [settings, ex, last] = await Promise.all([getSettings(), db.exercises.get(exerciseId), lastWorkoutWith(exerciseId)]);
+  const [settings, ex, history] = await Promise.all([getSettings(), db.exercises.get(exerciseId), exerciseHistory(exerciseId)]);
   return buildDraftExercise({
     exerciseId,
-    type: ex?.type ?? 'weight_reps',
+    exercise: ex,
     routineExercise: routineEx,
-    lastSets: lastSetsFor(last, exerciseId),
+    history,
     settings,
     unit: settings.unit,
   });

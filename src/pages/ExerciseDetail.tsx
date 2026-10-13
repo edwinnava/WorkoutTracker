@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { db } from '../db/db';
+import { db, saveSettings } from '../db/db';
+import { autoIncrement, incrementFor, incrementOptions, toOverrideKg } from '../lib/increments';
 import { EQUIPMENT_LABELS, MUSCLE_LABELS, TYPE_LABELS } from '../data/exercises';
 import { useSettings } from '../lib/hooks';
 import { estimate1RM, personalRecords, sessionsForExercise, usesWeight } from '../lib/stats';
@@ -17,7 +18,8 @@ type Metric = 'heaviest' | 'e1rm' | 'volume' | 'reps' | 'duration' | 'distance';
 export default function ExerciseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { unit } = useSettings();
+  const settings = useSettings();
+  const { unit } = settings;
   const ex = useLiveQuery(() => db.exercises.get(id!), [id]);
   const workouts = useLiveQuery(() => db.workouts.where('exerciseIds').equals(id!).toArray(), [id]);
   const [tab, setTab] = useState<'summary' | 'history'>('summary');
@@ -119,6 +121,37 @@ export default function ExerciseDetail() {
         <span className="badge">{TYPE_LABELS[ex.type]}</span>
         {ex.custom && <span className="badge warn">Custom</span>}
       </div>
+
+      {usesWeight(ex.type) && (
+        <div className="list" style={{ marginTop: 14 }}>
+          <div className="list-item">
+            <div className="main">
+              Weight jump
+              <div className="tiny subtle">Added when you hit the top of your rep range</div>
+            </div>
+            <select
+              className="input"
+              style={{ width: 150 }}
+              value={settings.increments[ex.id] != null ? String(incrementFor(ex, settings)) : 'auto'}
+              onChange={(e) => {
+                const increments = { ...settings.increments };
+                if (e.target.value === 'auto') delete increments[ex.id];
+                else increments[ex.id] = toOverrideKg(Number(e.target.value), unit);
+                saveSettings({ increments });
+              }}
+            >
+              <option value="auto">Auto ({autoIncrement(ex, settings.increment, unit)} {unit})</option>
+              {[...new Set([...incrementOptions(unit), ...(settings.increments[ex.id] != null ? [incrementFor(ex, settings)] : [])])]
+                .sort((a, b) => a - b)
+                .map((v) => (
+                <option key={v} value={String(v)}>
+                  {v} {unit}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       <div className="seg" style={{ marginTop: 16 }}>
         <button className={tab === 'summary' ? 'on' : ''} onClick={() => setTab('summary')}>

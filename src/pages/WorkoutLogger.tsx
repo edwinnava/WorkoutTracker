@@ -183,8 +183,29 @@ export default function WorkoutLogger() {
   };
 
   const replaceExercise = async (key: string, id: string) => {
-    const d = await makeDraftExercise(id);
-    update((a) => ({ ...a, exercises: a.exercises.map((e) => (e.key === key ? { ...d, key, restSec: e.restSec, supersetId: e.supersetId } : e)) }));
+    const old = w.exercises.find((e) => e.key === key);
+    if (!old || old.exerciseId === id) return;
+    // Keep the same number and kinds of sets; weights/reps are suggested from the new exercise's history.
+    const d = await makeDraftExercise(id, { exerciseId: id, restSec: old.restSec, sets: old.sets.map((s) => ({ type: s.type })) });
+    update((a) => ({
+      ...a,
+      exercises: a.exercises.map((e) => (e.key === key ? { ...d, key, notes: e.notes, restSec: e.restSec, supersetId: e.supersetId } : e)),
+    }));
+    // Offer to make the swap permanent in the routine (e.g. your gym doesn't have that machine).
+    if (w.routineId && !editing) {
+      const routine = await db.routines.get(w.routineId);
+      if (routine?.exercises.some((e) => e.exerciseId === old.exerciseId)) {
+        const from = exMap.get(old.exerciseId)?.name ?? 'this exercise';
+        const to = exMap.get(id)?.name ?? 'the new one';
+        if (confirm(`Swapped for today.\n\nAlso replace “${from}” with “${to}” in your “${routine.name}” routine for next time?`)) {
+          await db.routines.put({
+            ...routine,
+            exercises: routine.exercises.map((e) => (e.exerciseId === old.exerciseId ? { ...e, exerciseId: id, sets: e.sets.map((s) => ({ ...s, weightKg: null })) } : e)),
+          });
+          toast(`Updated “${routine.name}”`);
+        }
+      }
+    }
   };
 
   const toggleDone = (ex: DraftExercise, idx: number) => {
@@ -340,6 +361,9 @@ export default function WorkoutLogger() {
               <button className="name ellipsis" onClick={() => navigate(`/exercises/${ex.exerciseId}`)}>
                 {info?.name ?? 'Unknown exercise'}
               </button>
+              <button className="icon-btn accent" onClick={() => setPicker({ replaceKey: ex.key })} aria-label="Replace exercise" title="Replace exercise">
+                <IconSwap size={20} />
+              </button>
               <button className="icon-btn" onClick={() => setMenuFor(ex.key)} aria-label="Exercise options">
                 <IconDots />
               </button>
@@ -485,6 +509,7 @@ export default function WorkoutLogger() {
         <ExercisePicker
           single={!!picker.replaceKey}
           title={picker.replaceKey ? 'Replace Exercise' : 'Add Exercise'}
+          similarTo={picker.replaceKey ? w.exercises.find((e) => e.key === picker.replaceKey)?.exerciseId : undefined}
           onClose={() => setPicker(null)}
           onPick={(ids) => (picker.replaceKey ? replaceExercise(picker.replaceKey, ids[0]) : addExercises(ids))}
         />
@@ -519,7 +544,7 @@ export default function WorkoutLogger() {
                 })),
             },
             {
-              label: 'Remove exercise',
+              label: 'Skip / remove for today',
               icon: <IconTrash size={20} />,
               danger: true,
               onClick: () => update((a) => ({ ...a, exercises: a.exercises.filter((e) => e.key !== menuEx.key) })),
