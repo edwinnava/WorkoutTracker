@@ -1,9 +1,9 @@
 :root {
-  --bg: #0b0b0d;
-  --surface: #16161a;
-  --surface-2: #212127;
-  --surface-3: #2d2d35;
-  --border: #25252c;
+  --bg: #000000;
+  --surface: #0d0d0f;
+  --surface-2: #1a1a1e;
+  --surface-3: #27272d;
+  --border: #1d1d22;
   --text: #f5f5f7;
   --muted: #a1a1ad;
   --faint: #6d6d79;
@@ -149,8 +149,8 @@ textarea.input { resize: vertical; min-height: 76px; }
 
 /* Stats */
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); min-width: 0; }
-.stat .v { font-size: 21px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 10px 13px 12px; box-shadow: var(--shadow); min-width: 0; }
+.stat .v { font-size: 21px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .stat .l { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .kv { display: flex; gap: 22px; flex-wrap: wrap; }
 .kv div .l { font-size: 12px; color: var(--muted); }

@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'Workout Tracker',
         short_name: 'Workouts',
         description: 'Track workouts, weights and reps. Import your Hevy history.',
-        theme_color: '#121212',
-        background_color: '#121212',
+        theme_color: '#000000',
+        background_color: '#000000',
         display: 'standalone',
         start_url: './',
         icons: [

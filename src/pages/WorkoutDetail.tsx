@@ -82,7 +82,7 @@ export default function WorkoutDetail() {
           <div className="l">Time</div>
         </div>
         <div className="stat">
-          <div className="v" style={{ fontSize: 17 }}>
+          <div className="v" style={{ fontSize: 16, lineHeight: '29px', whiteSpace: 'nowrap' }}>
             {fmtVolume(workoutVolume(w, exMap), unit)}
           </div>
           <div className="l">Volume</div>
