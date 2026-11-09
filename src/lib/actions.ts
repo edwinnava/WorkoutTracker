@@ -1,5 +1,6 @@
 import { db, getSettings, newId, withExerciseIds } from '../db/db';
-import type { ActiveWorkout, DraftExercise, DraftSet, Routine, Workout, WorkoutSet } from '../db/types';
+import type { ActiveWorkout, DraftExercise, DraftSet, Exercise, Routine, Workout, WorkoutSet } from '../db/types';
+import { AREA_LABELS, CAUTION_DAYS, cautionFor, isOffSession, recentAreas } from './coach';
 import { buildDraftExercise, draftKey, emptyDraftSet, lastSetsFor } from './suggest';
 import {
   fmtDistance,
@@ -11,17 +12,27 @@ import {
   parseNum,
 } from './units';
 
-/** Sets from the most recent sessions of an exercise, newest first. */
-export async function exerciseHistory(exerciseId: string, sessions = 5) {
-  const list = await db.workouts.where('exerciseIds').equals(exerciseId).toArray();
-  return list
-    .sort((a, b) => b.startTime - a.startTime)
-    .slice(0, sessions)
-    .map((w) => lastSetsFor(w, exerciseId));
+/**
+ * Sets from the most recent sessions of an exercise, newest first.
+ * Sessions you flagged as light / something bothering you are left out so
+ * they don't drag suggestions down (unless that's all there is).
+ */
+export async function exerciseHistory(exerciseId: string, sessions = 5, ex?: Exercise) {
+  const list = (await db.workouts.where('exerciseIds').equals(exerciseId).toArray()).sort((a, b) => b.startTime - a.startTime);
+  const normal = list.filter((w) => !isOffSession(w, ex));
+  return (normal.length ? normal : list).slice(0, sessions).map((w) => lastSetsFor(w, exerciseId));
+}
+
+/** Body areas flagged in recent feedback (see coach.ts). */
+async function recentCaution() {
+  const since = Date.now() - CAUTION_DAYS * 86400000;
+  return recentAreas(await db.workouts.where('startTime').above(since).toArray());
 }
 
 export async function makeDraftExercise(exerciseId: string, routineEx?: Routine['exercises'][number]): Promise<DraftExercise> {
-  const [settings, ex, history] = await Promise.all([getSettings(), db.exercises.get(exerciseId), exerciseHistory(exerciseId)]);
+  const [settings, ex, caution] = await Promise.all([getSettings(), db.exercises.get(exerciseId), recentCaution()]);
+  const history = await exerciseHistory(exerciseId, 5, ex);
+  const area = cautionFor(ex, caution);
   return buildDraftExercise({
     exerciseId,
     exercise: ex,
@@ -29,7 +40,13 @@ export async function makeDraftExercise(exerciseId: string, routineEx?: Routine[
     history,
     settings,
     unit: settings.unit,
+    hold: area ? AREA_LABELS[area].toLowerCase() : undefined,
   });
+}
+
+/** Time actually spent working out so far (excludes pauses). */
+export function activeElapsedMs(a: Pick<ActiveWorkout, 'startTime' | 'pausedAt' | 'pausedMs'>, now = Date.now()): number {
+  return Math.max(0, (a.pausedAt ?? now) - a.startTime - (a.pausedMs ?? 0));
 }
 
 function defaultTitle(now = new Date()) {
@@ -134,8 +151,13 @@ export function draftToWorkout(a: ActiveWorkout, endTime: number): Workout {
 }
 
 export async function finishWorkout(a: ActiveWorkout, endTime?: number): Promise<number> {
-  const w = draftToWorkout(a, endTime ?? a.editingEndTime ?? Date.now());
+  // Paused time doesn't count: the saved workout ends after the time you actually trained.
+  const w = draftToWorkout(a, endTime ?? a.editingEndTime ?? a.startTime + activeElapsedMs(a));
   return db.transaction('rw', db.workouts, db.active, async () => {
+    // Editing rebuilds the workout from the draft, so carry over what the draft doesn't hold.
+    const before = a.editingId != null ? await db.workouts.get(a.editingId) : undefined;
+    if (before?.feedback) w.feedback = before.feedback;
+    if (before?.source) w.source = before.source;
     const id = await db.workouts.put(w);
     await db.active.delete('current');
     return id;

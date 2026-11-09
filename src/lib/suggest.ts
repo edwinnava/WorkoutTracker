@@ -32,6 +32,8 @@ interface OverloadOptions {
   unit: Unit;
   /** Weight jump for this exercise, in the display unit. */
   increment: number;
+  /** Don't progress: repeat the last session as it was (e.g. "shoulder" was bothering you). */
+  hold?: string;
 }
 
 const median = (xs: number[]) => {
@@ -140,7 +142,7 @@ export function progressiveOverload(
       sets.push({ ...(targetSets?.[i] ?? { type: setType }) });
       continue;
     }
-    if (setType === 'warmup' || !repsBased) {
+    if (setType === 'warmup' || !repsBased || opts.hold) {
       sets.push({ type: setType, weightKg: prev.weightKg, reps: prev.reps, durationSec: prev.durationSec, distanceKm: prev.distanceKm });
       continue;
     }
@@ -159,7 +161,8 @@ export function progressiveOverload(
 
   const rangeText = range.min === range.max ? `${range.min} reps` : `${range.min}–${range.max} reps`;
   let note: string | undefined;
-  if (deload) note = 'No progress in 3 sessions → deload ~10% and build back up';
+  if (opts.hold) note = `Easy on the ${opts.hold} → holding your weight, no increase`;
+  else if (deload) note = 'No progress in 3 sessions → deload ~10% and build back up';
   else if (jumps > 1) {
     const fewest = Math.min(...work.map((x) => x.reps ?? 0));
     note = `${fewest}+ reps is well past ${range.max} → +${fmtNum(jump)} ${unit} to get back in range`;
@@ -202,12 +205,15 @@ export function buildDraftExercise(opts: {
   history: WorkoutSet[][];
   settings: Settings;
   unit: Unit;
+  /** Flagged body area this exercise loads: hold the weight instead of progressing. */
+  hold?: string;
 }): DraftExercise {
   const { exerciseId, exercise, routineExercise, history, settings, unit } = opts;
   const type = exercise?.type ?? 'weight_reps';
   const result = progressiveOverload(type, history, routineExercise?.sets, {
     unit,
     increment: incrementFor(exercise, { ...settings, unit }),
+    hold: opts.hold,
   });
   let sets = result.sets.map((s) => suggestionToDraftSet(s, unit));
   if (sets.length === 0) sets = [emptyDraftSet()];

@@ -5,6 +5,7 @@ import { useExerciseMap, useSettings, useWorkouts } from '../lib/hooks';
 import { workoutSetCount, workoutVolume } from '../lib/stats';
 import { fmtLongDuration, fmtVolume } from '../lib/units';
 import { IconHistory, IconSearch } from '../components/Icons';
+import { feedbackTags } from '../components/FeedbackCard';
 
 export function fmtDate(t: number, opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) {
   return new Date(t).toLocaleDateString(undefined, opts);
@@ -17,6 +18,11 @@ export function WorkoutCard({ w, exMap, unit }: { w: Workout; exMap: Map<string,
         <h3 className="ellipsis" style={{ flex: 1 }}>
           {w.title}
         </h3>
+        {feedbackTags(w.feedback).map((t) => (
+          <span key={t} className="badge warn">
+            {t}
+          </span>
+        ))}
         {w.source === 'hevy' && <span className="badge">Hevy</span>}
       </div>
       <div className="small subtle" style={{ marginTop: 2 }}>

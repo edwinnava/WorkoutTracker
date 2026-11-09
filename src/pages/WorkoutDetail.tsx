@@ -9,6 +9,7 @@ import { fmtLongDuration, fmtVolume } from '../lib/units';
 import { ActionMenu } from '../components/Sheet';
 import { IconBack, IconCopy, IconDots, IconEdit, IconList, IconPlay, IconTrash, IconTrophy } from '../components/Icons';
 import { fmtDate } from './History';
+import { FeedbackCard } from '../components/FeedbackCard';
 import { formatSet, setLabel } from './WorkoutLogger';
 
 export default function WorkoutDetail() {
@@ -100,6 +101,12 @@ export default function WorkoutDetail() {
           <div className="l">{prs > 0 ? 'Records' : 'Sets'}</div>
         </div>
       </div>
+
+      {w.id != null && (
+        <div style={{ marginTop: 12 }}>
+          <FeedbackCard w={w} startOpen={justFinished} />
+        </div>
+      )}
 
       {w.exercises.map((e, i) => {
         const ex = exMap.get(e.exerciseId);

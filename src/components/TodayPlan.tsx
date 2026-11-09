@@ -2,18 +2,19 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { saveSettings } from '../db/db';
 import type { Exercise, Routine, RoutineExercise, Settings } from '../db/types';
-import { exerciseHistory, replaceInRoutine, routineForToday } from '../lib/actions';
-import { toast } from '../lib/hooks';
+import { makeDraftExercise, replaceInRoutine, routineForToday } from '../lib/actions';
+import { toast, useExercises, useWorkouts } from '../lib/hooks';
+import { mixUpRoutine } from '../lib/coach';
 import { usesReps, usesWeight } from '../lib/stats';
-import { buildDraftExercise } from '../lib/suggest';
+import type { buildDraftExercise } from '../lib/suggest';
 import { startOfDay } from '../lib/stats';
 import { ExercisePicker } from './ExercisePicker';
-import { IconDown, IconPlus, IconSparkle, IconSwap, IconTrash, IconUp, IconX } from './Icons';
+import { IconDown, IconPlus, IconShuffle, IconSparkle, IconSwap, IconTrash, IconUp, IconX } from './Icons';
 import { Sheet } from './Sheet';
 import { ReorderSheet } from './ReorderSheet';
 
 /** One-line preview of what's suggested for an exercise, e.g. "3 sets · 190 lbs × 6". */
-function summary(re: RoutineExercise, ex: Exercise | undefined, draft: ReturnType<typeof buildDraftExercise> | undefined, unit: string) {
+export function planSummary(re: RoutineExercise, ex: Exercise | undefined, draft: ReturnType<typeof buildDraftExercise> | undefined, unit: string) {
   const working = re.sets.filter((s) => s.type !== 'warmup').length;
   const warm = re.sets.length - working;
   const head = `${working} set${working === 1 ? '' : 's'}${warm ? ` + ${warm} warm-up` : ''}`;
@@ -42,20 +43,14 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
   const [picker, setPicker] = useState<null | { replaceIdx?: number }>(null);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [mixSeed, setMixSeed] = useState(0);
+  const workouts = useWorkouts();
+  const library = useExercises();
 
   const previews = useLiveQuery(
     () =>
       Promise.all(
-        exercises.map(async (re) =>
-          buildDraftExercise({
-            exerciseId: re.exerciseId,
-            exercise: exMap.get(re.exerciseId),
-            routineExercise: re,
-            history: await exerciseHistory(re.exerciseId),
-            settings,
-            unit: settings.unit,
-          }),
-        ),
+        exercises.map((re) => makeDraftExercise(re.exerciseId, re)),
       ),
     [JSON.stringify(exercises), exMap, settings],
   );
@@ -84,6 +79,17 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
     ]);
   };
 
+  // Always mixes from the saved routine, so tapping again gives a different set rather than drifting further away.
+  const mixUp = async () => {
+    if (!workouts || !library) return;
+    const next = mixUpRoutine(routine.exercises, workouts, library, { seed: mixSeed });
+    setMixSeed((n) => n + 1);
+    const changed = next.filter((e, i) => e.exerciseId !== routine.exercises[i].exerciseId).length;
+    if (changed === 0) return toast('No good alternatives found yet');
+    await save(next);
+    toast(`Swapped ${changed} exercise${changed === 1 ? '' : 's'} for today`);
+  };
+
   const editing = editIdx != null ? exercises[editIdx] : undefined;
   const editingEx = editing ? exMap.get(editing.exerciseId) : undefined;
 
@@ -99,7 +105,7 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
                 <div className="ellipsis" style={{ fontWeight: 600 }}>
                   {ex?.name ?? re.exerciseId}
                 </div>
-                <div className="small subtle">{summary(re, ex, draft, settings.unit)}</div>
+                <div className="small subtle">{planSummary(re, ex, draft, settings.unit)}</div>
                 {draft?.suggestionNote?.includes('→') && (
                   <div className="tiny" style={{ color: 'var(--accent)', marginTop: 2 }}>
                     <IconSparkle size={11} /> {draft.suggestionNote}
@@ -121,6 +127,9 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
         <button className="btn ghost sm" onClick={() => setPicker({})}>
           <IconPlus size={16} /> Add exercise
         </button>
+        <button className="btn ghost sm" onClick={mixUp}>
+          <IconShuffle size={16} /> Mix it up
+        </button>
         {exercises.length > 1 && (
           <button className="btn ghost sm" onClick={() => setReordering(true)}>
             ⇅ Reorder
@@ -136,7 +145,7 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
 
       {reordering && (
         <ReorderSheet
-          items={exercises.map((re, i) => ({ key: String(i), label: exMap.get(re.exerciseId)?.name ?? re.exerciseId, sub: summary(re, exMap.get(re.exerciseId), previews?.[i], settings.unit) }))}
+          items={exercises.map((re, i) => ({ key: String(i), label: exMap.get(re.exerciseId)?.name ?? re.exerciseId, sub: planSummary(re, exMap.get(re.exerciseId), previews?.[i], settings.unit) }))}
           onClose={() => setReordering(false)}
           onSave={(keys) => {
             const next = keys.map((k) => exercises[Number(k)]);

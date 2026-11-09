@@ -45,6 +45,18 @@ export interface WorkoutExercise {
   sets: WorkoutSet[];
 }
 
+/** Joints/areas you can flag as bothering you after a workout. */
+export type BodyArea = 'shoulder' | 'elbow' | 'wrist' | 'neck' | 'upper_back' | 'lower_back' | 'hip' | 'knee' | 'ankle';
+
+/** How a workout went, left after finishing. Drives suggestions (see lib/coach.ts). */
+export interface WorkoutFeedback {
+  /** Went lighter than usual on purpose: these sets aren't used to judge progress. */
+  light?: boolean;
+  /** Areas that were bothering you. Limits `light` to exercises that load them, and eases off them for a while. */
+  areas?: BodyArea[];
+  note?: string;
+}
+
 export interface Workout {
   id?: number;
   title: string;
@@ -56,6 +68,7 @@ export interface Workout {
   exerciseIds: string[];
   routineId?: string;
   source?: 'app' | 'hevy';
+  feedback?: WorkoutFeedback;
 }
 
 export interface RoutineSet {
@@ -147,6 +160,10 @@ export interface ActiveWorkout {
   /** When editing an already-saved workout. */
   editingId?: number;
   editingEndTime?: number;
+  /** Set while the workout timer is paused. */
+  pausedAt?: number | null;
+  /** Total time spent paused so far (not counting a pause in progress). */
+  pausedMs?: number;
   restEndsAt?: number | null;
   restTotal?: number;
   exercises: DraftExercise[];

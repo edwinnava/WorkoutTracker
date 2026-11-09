@@ -1,6 +1,7 @@
 import { HashRouter, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useActive, useNow, useToastHost } from './lib/hooks';
 import { fmtDuration } from './lib/units';
+import { activeElapsedMs } from './lib/actions';
 import { IconDumbbell, IconHistory, IconHome, IconList, IconUser } from './components/Icons';
 import Home from './pages/Home';
 import History from './pages/History';
@@ -33,7 +34,12 @@ function ResumeBar() {
             {active.editingId != null ? 'Editing: ' : ''}
             {active.title}
           </span>
-          {active.editingId == null && <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtDuration((now - active.startTime) / 1000)}</span>}
+          {active.editingId == null && (
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {active.pausedAt != null ? 'Paused · ' : ''}
+              {fmtDuration(activeElapsedMs(active, now) / 1000)}
+            </span>
+          )}
           <span>Resume ›</span>
         </button>
       </div>

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db/db';
 import type { ActiveWorkout, DraftExercise, DraftSet, ExerciseType, SetType, Unit, WorkoutSet } from '../db/types';
-import { discardWorkout, draftSetToSet, finishWorkout, makeDraftExercise, replaceInRoutine } from '../lib/actions';
+import { activeElapsedMs, discardWorkout, draftSetToSet, finishWorkout, makeDraftExercise, replaceInRoutine } from '../lib/actions';
 import { toast, useExerciseMap, useNow } from '../lib/hooks';
 import { usesDistance, usesDuration, usesReps, usesWeight } from '../lib/stats';
 import { emptyDraftSet, lastSetsFor } from '../lib/suggest';
@@ -18,6 +18,8 @@ import {
   IconDown,
   IconLink,
   IconNote,
+  IconPause,
+  IconPlay,
   IconPlate,
   IconPlus,
   IconSparkle,
@@ -170,6 +172,10 @@ export default function WorkoutLogger() {
   if (!w) return null;
   const unit = w.unit;
   const editing = w.editingId != null;
+  const paused = w.pausedAt != null;
+  const pause = () => update((a) => (a.pausedAt != null ? a : { ...a, pausedAt: Date.now(), restEndsAt: null }));
+  const resume = () =>
+    update((a) => (a.pausedAt == null ? a : { ...a, pausedMs: (a.pausedMs ?? 0) + (Date.now() - a.pausedAt), pausedAt: null }));
 
   let volume = 0;
   let doneSets = 0;
@@ -229,6 +235,7 @@ export default function WorkoutLogger() {
     if (usesDuration(type) && !usesDistance(type) && !filled.duration) return toast('Enter a time first');
     if (type === 'distance_duration' && !filled.duration && !filled.distance) return toast('Enter distance or time first');
     updateSet(ex.key, idx, filled);
+    resume(); // logging a set means you're back at it
     // Rest timer: in a superset, only start after the last exercise of the group.
     const exIdx = w.exercises.findIndex((e) => e.key === ex.key);
     const next = w.exercises[exIdx + 1];
@@ -327,9 +334,9 @@ export default function WorkoutLogger() {
         <input className="title-input" value={w.title} onChange={(e) => update((a) => ({ ...a, title: e.target.value }))} style={{ marginTop: 6 }} />
         <div className="logger-stats">
           <div>
-            <div className="l">Duration</div>
-            <div className="v" style={{ color: 'var(--accent)' }}>
-              {editing ? fmtLongDuration((w.editingEndTime ?? w.startTime) - w.startTime) : fmtDuration((now - w.startTime) / 1000)}
+            <div className="l">{paused ? 'Paused' : 'Duration'}</div>
+            <div className="v" style={{ color: paused ? 'var(--warmup)' : 'var(--accent)' }}>
+              {editing ? fmtLongDuration((w.editingEndTime ?? w.startTime) - w.startTime) : fmtDuration(activeElapsedMs(w, now) / 1000)}
             </div>
           </div>
           <div>
@@ -340,8 +347,24 @@ export default function WorkoutLogger() {
             <div className="l">Sets</div>
             <div className="v">{doneSets}</div>
           </div>
+          <div className="spacer" />
+          {!editing && (
+            <button className={'btn sm pause-btn' + (paused ? ' on' : '')} onClick={paused ? resume : pause}>
+              {paused ? <IconPlay size={14} /> : <IconPause size={14} />} {paused ? 'Resume' : 'Pause'}
+            </button>
+          )}
         </div>
       </div>
+
+      {paused && (
+        <button className="paused-banner" onClick={resume}>
+          <IconPause size={18} />
+          <span>
+            <strong>Workout paused</strong>
+            <span className="small"> — the clock is stopped. Tap to resume.</span>
+          </span>
+        </button>
+      )}
 
       {w.exercises.length === 0 && (
         <div className="empty">

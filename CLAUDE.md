@@ -27,6 +27,7 @@ npx vite preview --port 4173   # serve the build for browser checks
 - `src/db/`: Dexie schema (`db.ts`) and all types (`types.ts`). `Settings` lives in the `settings` table under key `'settings'`, and `getSettings()` merges `DEFAULT_SETTINGS`. **When adding a settings field, add it to both the type and `DEFAULT_SETTINGS`** (and to the settings literal in `src/sync/__tests__/engine.test.ts`).
 - `src/data/exercises.ts`: built-in library (~220 exercises, named exactly like Hevy so CSV imports match). `secondary` muscles mark compound lifts. `src/data/programs.ts`: ready-made programs.
 - `src/lib/suggest.ts`: progressive overload (double progression, auto rep range from history, stall → ~10% deload) and today's-workout logic (plan pick → weekday schedule → rotation). `src/lib/increments.ts`: per-exercise weight jumps.
+- `src/lib/coach.ts`: the in-app "coach" (no server/AI): workout feedback rules (`isOffSession`, `recentAreas`: flagged sessions are skipped in progression history and flagged body areas hold the weight for `CAUTION_DAYS`), muscle balance (`muscleStats`, weekly sets vs `TRACKED` targets), `recommendWorkout` (Today card → Recommended tab) and `mixUpRoutine` ("Mix it up").
 - `src/lib/hevy.ts`: Hevy CSV parse/export. `src/lib/dataio.ts`: import into the DB, JSON backup/restore.
 - `src/lib/actions.ts`: start/finish/edit workouts, the draft (active workout) ↔ saved workout conversion, and `routineForToday` (today-only edits from the Today card).
 - `src/sync/`: `engine.ts` is backend-agnostic two-way sync (Dexie hooks → localStorage outbox → remote; remote listeners → local, tombstones for deletes). `firebase.ts` is the Firestore/Auth adapter. `state.ts` holds account state for the UI and lazy-loads Firebase.
@@ -36,6 +37,8 @@ npx vite preview --port 4173   # serve the build for browser checks
 ## Data rules (important)
 
 - Weights are stored in **kg** and distances in **km**, and converted for display (`src/lib/units.ts`). The in-progress workout (`active` table) stores the strings the user typed, in the user's unit.
+- Pausing a workout sets `pausedAt`/`pausedMs` on the draft; use `activeElapsedMs` for its duration. A finished workout's `endTime` is `startTime` + time actually trained (pauses excluded).
+- `Workout.feedback` (went light / body areas / note) is edited on WorkoutDetail via `FeedbackCard` and syncs with the workout.
 - Workout ids are random safe integers (`newWorkoutId`) so ids from different devices never collide. Don't reintroduce auto-increment.
 - Use `bulkDelete`, never `Table.clear()`, for user-initiated deletes: `clear()` bypasses Dexie hooks, so sync would never learn about the deletion. `SyncEngine.clearLocal` (sign-out) intentionally bypasses sync.
 - Only custom exercises sync. Built-ins are re-seeded on every start (`ensureSeed`).

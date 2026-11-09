@@ -40,3 +40,6 @@ export const IconSparkle = make(<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8
 export const IconCopy = make(<><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></>);
 export const IconNote = make(<><path d="M5 4h14v16H5z" /><path d="M9 9h6M9 13h6M9 17h3" /></>);
 export const IconPlate = make(<><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" /></>);
+export const IconPause = make(<path d="M8 5v14M16 5v14" strokeWidth={2.6} />);
+export const IconShuffle = make(<><path d="M3 7h3.5c5 0 6 10 11 10H21l-2.5-2.5M21 17l-2.5 2.5" /><path d="M3 17h3.5c1.6 0 2.8-1 3.8-2.4M21 7h-3.5c-1.6 0-2.8 1-3.8 2.4M21 7l-2.5-2.5M21 7l-2.5 2.5" /></>);
+export const IconFlag = make(<><path d="M5 21V4" /><path d="M5 4h11l-2 4 2 4H5" /></>);

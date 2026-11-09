@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../db/db';
 import type { Routine } from '../db/types';
 import { hasActiveWorkout, routineForToday, startWorkout } from '../lib/actions';
-import { useExerciseMap, useSettings, useWorkouts } from '../lib/hooks';
+import { useExerciseMap, useExercises, useSettings, useWorkouts } from '../lib/hooks';
 import { startOfDay, startOfWeek, weekStreak, workoutVolume } from '../lib/stats';
 import { suggestToday } from '../lib/suggest';
 import { fmtLongDuration, fmtVolume } from '../lib/units';
@@ -14,6 +14,8 @@ import { SignInButton, SyncBadge } from '../components/AccountCard';
 import { useAccount } from '../sync/state';
 import { PlanSheet } from '../components/PlanSheet';
 import { TodayPlan } from '../components/TodayPlan';
+import { RecommendedPlan } from '../components/RecommendedPlan';
+import { MuscleBalance } from '../components/MuscleBalance';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -36,6 +38,13 @@ export default function Home() {
   const exMap = useExerciseMap();
   const account = useAccount();
   const [planOpen, setPlanOpen] = useState(false);
+  const library = useExercises();
+  // Which side of the Today card is showing: your own plan or the coach's pick.
+  const [tab, setTabState] = useState<'plan' | 'coach'>(() => (localStorage.getItem('todayTab') === 'coach' ? 'coach' : 'plan'));
+  const setTab = (t: 'plan' | 'coach') => {
+    localStorage.setItem('todayTab', t);
+    setTabState(t);
+  };
 
   const today = useMemo(
     () => (routines && workouts ? suggestToday(routines, workouts, settings) : null),
@@ -93,6 +102,26 @@ export default function Home() {
             </button>
           )}
         </div>
+        <div className="seg" style={{ marginTop: 12 }}>
+          <button className={tab === 'plan' ? 'on' : ''} onClick={() => setTab('plan')}>
+            My plan
+          </button>
+          <button className={tab === 'coach' ? 'on' : ''} onClick={() => setTab('coach')}>
+            Recommended
+          </button>
+        </div>
+        {tab === 'coach' ? (
+          workouts && library ? (
+            <RecommendedPlan
+              workouts={workouts}
+              exercises={library}
+              exMap={exMap}
+              settings={settings}
+              onStart={(name, exercises) => confirmAndStart(navigate, { id: '', name, order: 0, createdAt: Date.now(), exercises })}
+            />
+          ) : null
+        ) : (
+          <>
         {today?.kind === 'rest' || today?.kind === 'picked-rest' ? (
           <>
             <h2 style={{ marginTop: 8 }}>Rest day</h2>
@@ -116,7 +145,7 @@ export default function Home() {
             <p className="subtle small">Create a routine or add a ready-made program and you’ll get a suggested workout every day.</p>
           </>
         )}
-        {doneToday && <p className="small" style={{ color: 'var(--success)', margin: '8px 0 0' }}>✓ You already trained today</p>}
+            {doneToday && <p className="small" style={{ color: 'var(--success)', margin: '8px 0 0' }}>✓ You already trained today</p>}
         <div className="row" style={{ marginTop: 14 }}>
           {routine && today?.kind !== 'rest' && today?.kind !== 'picked-rest' ? (
             <button className="btn primary block" onClick={() => confirmAndStart(navigate, routineForToday(routine, settings.todayPlan))}>
@@ -128,6 +157,8 @@ export default function Home() {
             </Link>
           )}
         </div>
+          </>
+        )}
         <button className="btn block" style={{ marginTop: 8 }} onClick={() => confirmAndStart(navigate)}>
           <IconPlus size={18} /> Start Empty Workout
         </button>
@@ -159,6 +190,13 @@ export default function Home() {
       <div className="small subtle" style={{ marginTop: 6 }}>
         Volume this week: {fmtVolume(weekVolume, settings.unit)}
       </div>
+
+      {workouts && workouts.length > 0 && (
+        <>
+          <div className="section-title">Muscle balance</div>
+          <MuscleBalance workouts={workouts} exMap={exMap} />
+        </>
+      )}
 
       <div className="section-title row">
         <span>Recent workouts</span>
