@@ -44,5 +44,4 @@ export const IconPause = make(<path d="M8 5v14M16 5v14" strokeWidth={2.6} />);
 export const IconShuffle = make(<><path d="M3 7h3.5c5 0 6 10 11 10H21l-2.5-2.5M21 17l-2.5 2.5" /><path d="M3 17h3.5c1.6 0 2.8-1 3.8-2.4M21 7h-3.5c-1.6 0-2.8 1-3.8 2.4M21 7l-2.5-2.5M21 7l-2.5 2.5" /></>);
 export const IconFlag = make(<><path d="M5 21V4" /><path d="M5 4h11l-2 4 2 4H5" /></>);
 export const IconChat = make(<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4H5.5A1.5 1.5 0 0 1 4 14.5v-9Z" />);
-export const IconKey = make(<><circle cx="8" cy="15" r="4" /><path d="m11 12 8.5-8.5M16 7l3 3M14 9l2 2" /></>);
 export const IconSend = make(<path d="M4 12 20 4l-6 16-3-7-7-1Z" />);

@@ -14,7 +14,7 @@ import Exercises from './pages/Exercises';
 import ExerciseDetail from './pages/ExerciseDetail';
 import Profile from './pages/Profile';
 
-// The coach pulls in the Claude SDK, so it loads only when opened.
+// The coach chat loads only when opened.
 const Coach = lazy(() => import('./pages/Coach'));
 
 const TABS = [

@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { db, getSettings, newId, saveSettings } from '../db/db';
 import type { BodyArea, Exercise, Routine, Settings, Workout, WorkoutFeedback } from '../db/types';
 import { MUSCLE_LABELS } from '../data/exercises';
@@ -7,23 +6,76 @@ import { incrementFor } from './increments';
 import { fmtNum, fmtWeight, fromDisplayWeight } from './units';
 
 /*
- * The coach chat: Claude with tools that read and change the app's data.
- * Requests go straight from the browser to the Claude API with the user's own
- * API key, which is kept in localStorage on this device only (never synced).
+ * The coach chat: an AI model with tools that read and change the app's data.
+ * The model runs on the user's own PC (LM Studio or anything else that speaks
+ * the OpenAI-style /v1/chat/completions API with tool calling). Requests go
+ * straight from the browser to that server; its address is kept in
+ * localStorage on this device only (never synced).
  */
 
-const MODEL = 'claude-opus-5-5';
-const KEY_STORE = 'anthropicKey';
+const SERVER_STORE = 'coachServer';
 const CHAT_STORE = 'coachChat';
 /** A stored chat older than this starts fresh, so the coach isn't working from stale numbers. */
 const CHAT_MAX_AGE_MS = 6 * 3600000;
 const DAY = 86400000;
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
-export const getApiKey = () => localStorage.getItem(KEY_STORE) ?? '';
-export const setApiKey = (key: string) => (key.trim() ? localStorage.setItem(KEY_STORE, key.trim()) : localStorage.removeItem(KEY_STORE));
+export interface CoachServer {
+  /** Base address of the PC's model server, e.g. https://my-pc.tail1234.ts.net */
+  url: string;
+  /** Model id as the server lists it. */
+  model: string;
+}
 
-type MessageParam = Anthropic.Beta.BetaMessageParam;
+/** Tidies what the user typed into a base address (no trailing slash or /v1). */
+export function normalizeUrl(raw: string): string {
+  let u = raw.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+  if (u && !/^https?:\/\//i.test(u)) u = `https://${u}`;
+  return u;
+}
+
+export function getServer(): CoachServer | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(SERVER_STORE) ?? 'null') as CoachServer | null;
+    return s?.url && s.model ? s : null;
+  } catch {
+    return null;
+  }
+}
+export const setServer = (s: CoachServer | null) => (s ? localStorage.setItem(SERVER_STORE, JSON.stringify(s)) : localStorage.removeItem(SERVER_STORE));
+
+/** Why the phone can't reach the PC, in terms the user can act on. */
+function unreachable(url: string): string {
+  if (location.protocol === 'https:' && /^http:\/\//i.test(url)) return 'The address must start with https://. Phones block secure apps from plain http addresses — use the https address from Tailscale.';
+  return 'Couldn’t reach your PC. Check that it’s on, LM Studio’s server is running with CORS turned on, and Tailscale is connected on both the PC and this phone.';
+}
+
+/** Asks the PC which models it has. Doubles as the connection test. */
+export async function listModels(rawUrl: string): Promise<string[]> {
+  const url = normalizeUrl(rawUrl);
+  let res: Response;
+  try {
+    res = await fetch(`${url}/v1/models`, { signal: AbortSignal.timeout(8000) });
+  } catch {
+    throw new Error(unreachable(url));
+  }
+  if (!res.ok) throw new Error(`Your PC answered with an error (${res.status}). Check the address.`);
+  const body = (await res.json().catch(() => null)) as { data?: { id?: unknown }[] } | null;
+  const ids = (body?.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === 'string' && !/embed/i.test(id));
+  if (!ids.length) throw new Error('Connected, but no chat models were found. Download one in LM Studio first.');
+  return ids;
+}
+
+/** One message in the OpenAI-style chat format the PC's server speaks. */
+type ApiMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string };
+interface ToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
 
 /** How to reverse a change the coach made. */
 export type Undo =
@@ -41,7 +93,7 @@ export type ChatItem =
 export interface ChatState {
   /** Snapshot of the user's training, built when the chat started (kept fixed so the prompt stays cacheable). */
   snapshot: string;
-  messages: MessageParam[];
+  messages: ApiMessage[];
   items: ChatItem[];
   updatedAt: number;
 }
@@ -66,7 +118,7 @@ export function saveChat(s: ChatState | null) {
 
 /* ---------- What the coach knows up front ---------- */
 
-const SYSTEM = `You are the strength coach built into a personal workout-tracker app. You are talking with the app's only user, in a chat screen on their phone. They lift for general strength and muscle and are not a developer.
+const SYSTEM = `You are the strength coach built into a personal workout-tracker app, running on the user's own computer. You are talking with the app's only user, in a chat screen on their phone. They lift for general strength and muscle and are not a developer.
 
 You can see their training data and you can change things in the app with your tools. They asked for a coach that updates the app for them, so when they ask for a change or agree to one you suggested, make it with a tool straight away rather than describing how they could do it themselves. When a change is your own idea and it is a big one (rewriting a routine, moving their schedule), say what you would change and why in a sentence or two and check they want it first. Small adjustments they clearly asked for need no confirmation. Every change shows up in the chat with an Undo button, so after making one, say plainly what you changed in a line or two.
 
@@ -150,14 +202,16 @@ export async function buildSnapshot(now = Date.now()): Promise<string> {
 /* ---------- Tools ---------- */
 
 const str = { type: 'string' } as const;
-const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]): Anthropic.Beta.BetaTool => ({
-  name,
-  description,
-  eager_input_streaming: true,
-  input_schema: { type: 'object', properties, required },
+interface ToolDef {
+  type: 'function';
+  function: { name: string; description: string; parameters: { type: 'object'; properties: Record<string, unknown>; required: string[] } };
+}
+const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]): ToolDef => ({
+  type: 'function',
+  function: { name, description, parameters: { type: 'object', properties, required } },
 });
 
-const TOOLS: Anthropic.Beta.BetaTool[] = [
+const TOOLS: ToolDef[] = [
   tool('search_exercises', "Search the app's exercise library by name to get exercise ids. Returns up to 15 matches with muscle, equipment and whether the user has logged it before.", { query: { ...str, description: 'Part of the exercise name, e.g. "incline press" or "leg curl"' } }, ['query']),
   tool('get_exercise_history', 'Every working set from the most recent sessions of one exercise, newest first.', { exercise_id: str, sessions: { type: 'integer', description: 'How many sessions (default 8, max 30)' } }, ['exercise_id']),
   tool('get_recent_workouts', 'Full detail of recent workouts, newest first, including feedback and notes. Use for anything older or more detailed than the snapshot.', { count: { type: 'integer', description: 'How many workouts (default 10, max 40)' } }, []),
@@ -365,106 +419,146 @@ export async function applyUndo(u: Undo): Promise<void> {
   else await db.workouts.update(u.workoutId, { feedback: u.prev ?? undefined });
 }
 
-/* ---------- Talking to Claude ---------- */
-
-/** Turns an API failure into something the user can act on. */
-export function explainError(err: unknown): string {
-  if (err instanceof Anthropic.AuthenticationError) return 'Claude didn’t accept that API key. Check it in Coach settings (the key icon).';
-  if (err instanceof Anthropic.PermissionDeniedError) return 'That API key isn’t allowed to use this model. Check the key’s permissions in the Anthropic Console.';
-  if (err instanceof Anthropic.RateLimitError) return 'Too many requests right now. Wait a minute and try again.';
-  if (err instanceof Anthropic.BadRequestError) {
-    return /credit balance/i.test(err.message) ? 'Your Anthropic account is out of credit. Add credit in the Anthropic Console (Billing), then try again.' : `Claude rejected the request: ${err.message}`;
-  }
-  if (err instanceof Anthropic.APIConnectionError) return 'Couldn’t reach Claude. Check your internet connection and try again.';
-  if (err instanceof Anthropic.APIError) return `Claude had a problem (${err.status ?? 'error'}). Try again in a moment.`;
-  return err instanceof Error ? err.message : 'Something went wrong.';
-}
+/* ---------- Talking to the model ---------- */
 
 export async function newChat(): Promise<ChatState> {
   return { snapshot: await buildSnapshot(), messages: [], items: [], updatedAt: Date.now() };
 }
 
+/** Some local models write their reasoning inline; it isn't for the user. */
+export function stripThinking(text: string): string {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/<think>[\s\S]*$/, '')
+    .trim();
+}
+
+interface Turn {
+  content: string;
+  toolCalls: ToolCall[];
+  finish: string | null;
+}
+
+/** Reads a streamed chat completion, reporting text as it arrives. */
+async function readStream(res: Response, onText: (soFar: string) => void): Promise<Turn> {
+  const turn: Turn = { content: '', toolCalls: [], finish: null };
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  const handle = (line: string) => {
+    if (!line.startsWith('data:')) return;
+    const data = line.slice(5).trim();
+    if (!data || data === '[DONE]') return;
+    let chunk: { error?: { message?: string }; choices?: { delta?: { content?: string | null; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] }; finish_reason?: string | null }[] };
+    try {
+      chunk = JSON.parse(data);
+    } catch {
+      return; // a keep-alive or partial line: nothing to use
+    }
+    if (chunk.error) throw new Error(`The model reported a problem: ${chunk.error.message ?? 'unknown error'}`);
+    const choice = chunk.choices?.[0];
+    if (!choice) return;
+    if (choice.delta?.content) {
+      turn.content += choice.delta.content;
+      onText(turn.content);
+    }
+    for (const tc of choice.delta?.tool_calls ?? []) {
+      const i = tc.index ?? turn.toolCalls.length - 1;
+      const cur = (turn.toolCalls[i] ??= { id: '', type: 'function', function: { name: '', arguments: '' } });
+      if (tc.id) cur.id = tc.id;
+      if (tc.function?.name) cur.function.name += tc.function.name;
+      if (tc.function?.arguments) cur.function.arguments += tc.function.arguments;
+    }
+    if (choice.finish_reason) turn.finish = choice.finish_reason;
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    buf += decoder.decode(value, { stream: !done });
+    const lines = buf.split(/\r?\n/);
+    buf = done ? '' : lines.pop()!;
+    lines.forEach(handle);
+    if (done) break;
+  }
+  turn.toolCalls = turn.toolCalls.filter(Boolean).map((t, i) => ({ ...t, id: t.id || `call_${i}` }));
+  return turn;
+}
+
 /**
- * Sends the user's message and runs Claude's tool calls until it has finished
- * replying. `onChange` fires as text streams in and as actions happen.
+ * Sends the user's message and runs the model's tool calls until it has
+ * finished replying. `onChange` fires as text streams in and as actions happen.
  * Returns the new state; on failure the state carries an error item and the
  * conversation is rolled back to before this message so it can be retried.
  */
 export async function sendMessage(state: ChatState, text: string, onChange: (s: ChatState) => void, signal?: AbortSignal): Promise<ChatState> {
-  const client = new Anthropic({ apiKey: getApiKey(), dangerouslyAllowBrowser: true });
+  const server = getServer();
   const before = state.messages;
-  // The snapshot rides in the first user message so the conversation prefix never changes.
+  // The snapshot rides in the first user message so the start of the conversation never changes.
   const content = before.length === 0 ? `<training_snapshot>\n${state.snapshot}\n</training_snapshot>\n\n${text}` : text;
-  let messages: MessageParam[] = [...before, { role: 'user', content }];
+  let messages: ApiMessage[] = [...before, { role: 'user', content }];
   let items: ChatItem[] = [...state.items.filter((i) => i.kind !== 'error'), { kind: 'user', text }];
   const emit = (extra: ChatItem[] = []) => onChange({ ...state, messages, items: [...items, ...extra], updatedAt: Date.now() });
   emit();
 
   try {
-    let jsonRetries = 0;
-    for (let step = 0; step < 12; step++) {
-      const stream = client.beta.messages.stream(
-        {
-          model: MODEL,
-          max_tokens: 16000,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default',
-          output_config: { effort: 'medium' },
-          cache_control: { type: 'ephemeral' },
-          system: SYSTEM,
-          tools: TOOLS,
-          messages,
-        },
-        { signal },
-      );
-      let live = '';
-      stream.on('text', (delta) => {
-        live += delta;
-        emit([{ kind: 'assistant', text: live }]);
-      });
-
-      let message: Anthropic.Beta.BetaMessage;
+    if (!server) throw new Error('Set up the connection to your PC first (the key icon).');
+    let finished = false;
+    for (let step = 0; step < 10 && !finished; step++) {
+      let res: Response;
       try {
-        message = await stream.finalMessage();
-        jsonRetries = 0;
+        res = await fetch(`${server.url}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: server.model, stream: true, temperature: 0.4, messages: [{ role: 'system', content: SYSTEM }, ...messages], tools: TOOLS }),
+          signal,
+        });
       } catch (err) {
-        // With eager input streaming, a tool input that isn't parseable JSON rejects here: re-issue the turn.
-        if (err instanceof Anthropic.APIError || signal?.aborted || jsonRetries++ >= 2) throw err;
-        continue;
+        if (signal?.aborted) throw err;
+        throw new Error(unreachable(server.url));
+      }
+      if (!res.ok || !res.body) {
+        const detail = await res.text().then((t) => (JSON.parse(t) as { error?: { message?: string } | string }).error).catch(() => null);
+        const msg = typeof detail === 'string' ? detail : detail?.message;
+        if (msg && /context|token/i.test(msg)) throw new Error('The conversation is too long for the model’s memory. Start a new chat, or raise the model’s context length in LM Studio (16,000 or more).');
+        throw new Error(`Your PC answered with an error (${res.status})${msg ? `: ${msg}` : ''}.`);
       }
 
-      const said = message.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n\n').trim();
+      const turn = await readStream(res, (soFar) => {
+        const shown = stripThinking(soFar);
+        if (shown) emit([{ kind: 'assistant', text: shown }]);
+      });
+      const said = stripThinking(turn.content);
       if (said) items = [...items, { kind: 'assistant', text: said }];
+      if (turn.finish === 'length' && turn.toolCalls.length) throw new Error('The reply was cut off before a change could be made. Try asking for less at once.');
 
-      if (message.stop_reason === 'refusal') {
-        items = [...items, { kind: 'error', text: 'Claude declined to answer that one. Try rephrasing.' }];
-        messages = before;
+      messages = [...messages, { role: 'assistant', content: turn.content || null, ...(turn.toolCalls.length ? { tool_calls: turn.toolCalls } : {}) }];
+      if (!turn.toolCalls.length) {
+        if (!said) throw new Error('The model sent back an empty reply. Try again, or try a different model in LM Studio.');
+        finished = true;
         break;
       }
-      const toolUses = message.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
-      if (message.stop_reason === 'max_tokens' && toolUses.length) throw new Error('The reply was cut off before a change could be made. Try asking for less at once.');
 
-      // Keep the whole content (thinking blocks included) so the next request is valid.
-      messages = [...messages, { role: 'assistant', content: message.content }];
-      if (message.stop_reason === 'pause_turn') continue;
-      if (!toolUses.length) break;
-
-      const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
-      for (const t of toolUses) {
-        const out = await runTool(t.name, t.input).catch((e): ToolOutcome => fail(`Tool failed: ${e instanceof Error ? e.message : String(e)}`));
+      for (const call of turn.toolCalls) {
+        let out: ToolOutcome;
+        try {
+          out = await runTool(call.function.name, JSON.parse(call.function.arguments || '{}'));
+        } catch (e) {
+          out = fail(e instanceof SyntaxError ? 'The arguments were not valid JSON. Send the tool call again with valid JSON.' : `Tool failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
         if (out.action) items = [...items, { kind: 'action', ...out.action }];
-        results.push({ type: 'tool_result', tool_use_id: t.id, content: out.content, ...(out.isError ? { is_error: true } : {}) });
+        messages = [...messages, { role: 'tool', tool_call_id: call.id, content: out.isError ? `ERROR: ${out.content}` : out.content }];
       }
-      messages = [...messages, { role: 'user', content: results }];
       emit();
     }
+    if (!finished) items = [...items, { kind: 'error', text: 'The model kept going without finishing. Check the changes above, then ask again if something is missing.' }];
   } catch (err) {
-    if (!signal?.aborted) items = [...items, { kind: 'error', text: explainError(err) }];
+    if (!signal?.aborted) items = [...items, { kind: 'error', text: err instanceof Error ? err.message : 'Something went wrong.' }];
     // Drop the half-finished exchange unless tools already changed things the model should know about.
     if (!items.slice(state.items.length).some((i) => i.kind === 'action')) {
       messages = before;
       // Nothing was kept, so take the question back out too (the screen puts it back in the box to retry).
       items = [...state.items.filter((i) => i.kind !== 'error'), ...items.filter((i) => i.kind === 'error')];
+    } else if (messages.at(-1)?.role === 'assistant' && (messages.at(-1) as { tool_calls?: unknown }).tool_calls) {
+      messages = messages.slice(0, -1); // never leave tool calls without their results
     }
   }
   const done = { ...state, messages, items, updatedAt: Date.now() };

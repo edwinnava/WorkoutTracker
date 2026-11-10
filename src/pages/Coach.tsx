@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../lib/hooks';
-import { applyUndo, getApiKey, loadChat, newChat, saveChat, sendMessage, setApiKey, type ChatItem, type ChatState } from '../lib/coachChat';
-import { IconBack, IconCheck, IconEdit, IconKey, IconSend, IconSparkle } from '../components/Icons';
+import { applyUndo, getServer, listModels, loadChat, newChat, normalizeUrl, saveChat, sendMessage, setServer, type ChatItem, type ChatState } from '../lib/coachChat';
+import { IconBack, IconCheck, IconEdit, IconLink, IconSend, IconSparkle } from '../components/Icons';
 import { Sheet } from '../components/Sheet';
 
 const STARTERS = ['Should I be pushing harder on anything?', 'What are my weak points right now?', 'Plan next week around how I’ve been feeling', 'Is my routine missing anything?'];
@@ -28,47 +28,107 @@ function RichText({ text }: { text: string }) {
   return <>{blocks}</>;
 }
 
-function KeySheet({ onClose, first }: { onClose: () => void; first?: boolean }) {
-  const [key, setKey] = useState(getApiKey());
+function ServerSheet({ onClose, first }: { onClose: () => void; first?: boolean }) {
+  const saved = getServer();
+  const [url, setUrl] = useState(saved?.url ?? '');
+  const [models, setModels] = useState<string[]>(saved ? [saved.model] : []);
+  const [model, setModel] = useState(saved?.model ?? '');
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const test = async () => {
+    setTesting(true);
+    setStatus(null);
+    try {
+      const list = await listModels(url);
+      setModels(list);
+      setModel((m) => (list.includes(m) ? m : list[0]));
+      setUrl(normalizeUrl(url));
+      setStatus({ ok: true, text: `Connected. Found ${list.length} model${list.length === 1 ? '' : 's'}.` });
+    } catch (e) {
+      setStatus({ ok: false, text: e instanceof Error ? e.message : 'Could not connect.' });
+    } finally {
+      setTesting(false);
+    }
+  };
   const save = () => {
-    setApiKey(key);
-    toast(key.trim() ? 'Key saved on this phone' : 'Key removed');
+    setServer({ url: normalizeUrl(url), model });
+    toast('Coach connected');
     onClose();
   };
+
   return (
-    <Sheet title={first ? 'Connect Claude' : 'Coach settings'} onClose={onClose}>
+    <Sheet title={first ? 'Connect your PC' : 'Coach settings'} onClose={onClose}>
       <p className="small subtle" style={{ marginTop: 0 }}>
-        The coach runs on Claude and needs an Anthropic API key. This is separate from a Claude Pro or Max plan and is billed by use — usually a few cents per conversation.
+        The coach is an AI model running on your own PC, so it’s free to use. Your PC needs to be on with the model server running.
       </p>
       <ol className="steps small">
         <li>
-          Open <strong>console.anthropic.com</strong> and sign in (you can use the same email as your Claude account).
+          On the PC, start <strong>LM Studio</strong>’s local server with <strong>CORS</strong> turned on.
         </li>
         <li>
-          Go to <strong>Billing</strong> and add a small amount of credit, such as $5.
+          Share it with <strong>Tailscale</strong> and copy the <code>https://…ts.net</code> address it gives you.
         </li>
-        <li>
-          Go to <strong>API keys</strong>, tap <strong>Create key</strong>, and copy it. It starts with <code>sk-ant-</code>.
-        </li>
-        <li>Paste it below.</li>
+        <li>Paste that address below and tap Test connection.</li>
       </ol>
       <label className="field">
-        <span>API key</span>
-        <input className="input" type="password" autoComplete="off" placeholder="sk-ant-…" value={key} onChange={(e) => setKey(e.target.value)} />
+        <span>PC address</span>
+        <input
+          className="input"
+          inputMode="url"
+          autoCapitalize="none"
+          autoCorrect="off"
+          placeholder="https://my-pc.example.ts.net"
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setStatus(null);
+          }}
+        />
       </label>
-      <p className="tiny subtle">
-        The key is stored only on this phone and isn’t backed up or synced. Your training data is sent to Anthropic when you chat with the coach, and nowhere else.
-      </p>
-      <button className="btn primary block" onClick={save} disabled={!key.trim() && !getApiKey()}>
+      <button className="btn block" onClick={test} disabled={!url.trim() || testing}>
+        {testing ? 'Testing…' : 'Test connection'}
+      </button>
+      {status && (
+        <p className="small" style={{ color: status.ok ? 'var(--success)' : 'var(--danger)', margin: '10px 0 0' }}>
+          {status.text}
+        </p>
+      )}
+      {models.length > 0 && (
+        <label className="field" style={{ marginTop: 14 }}>
+          <span>Model</span>
+          <select className="input" value={model} onChange={(e) => setModel(e.target.value)}>
+            {models.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <p className="tiny subtle">The address is stored only on this phone. Your training data goes to your PC and nowhere else.</p>
+      <button className="btn primary block" onClick={save} disabled={!url.trim() || !model}>
         Save
       </button>
+      {saved && (
+        <button
+          className="btn ghost danger block"
+          style={{ marginTop: 6 }}
+          onClick={() => {
+            setServer(null);
+            onClose();
+          }}
+        >
+          Disconnect
+        </button>
+      )}
     </Sheet>
   );
 }
 
 export default function Coach() {
   const navigate = useNavigate();
-  const [hasKey, setHasKey] = useState(() => !!getApiKey());
+  const [hasKey, setHasKey] = useState(() => !!getServer());
   const [keyOpen, setKeyOpen] = useState(false);
   const [chat, setChat] = useState<ChatState | null>(() => loadChat());
   const [input, setInput] = useState('');
@@ -129,7 +189,7 @@ export default function Coach() {
           </button>
         )}
         <button className="icon-btn" onClick={() => setKeyOpen(true)} aria-label="Coach settings">
-          <IconKey size={20} />
+          <IconLink size={20} />
         </button>
       </div>
 
@@ -145,7 +205,7 @@ export default function Coach() {
             </p>
             {!hasKey && (
               <button className="btn primary" style={{ marginTop: 8 }} onClick={() => setKeyOpen(true)}>
-                <IconKey size={18} /> Connect Claude to start
+                <IconLink size={18} /> Connect your PC to start
               </button>
             )}
             <div className="coach-starters">
@@ -217,11 +277,11 @@ export default function Coach() {
       </form>
 
       {keyOpen && (
-        <KeySheet
+        <ServerSheet
           first={!hasKey}
           onClose={() => {
             setKeyOpen(false);
-            setHasKey(!!getApiKey());
+            setHasKey(!!getServer());
           }}
         />
       )}
