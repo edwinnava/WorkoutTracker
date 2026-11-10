@@ -136,7 +136,10 @@ export default function Coach() {
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
-  useEffect(() => bottom.current?.scrollIntoView({ block: 'end' }), [chat?.items, busy]);
+  // Braces matter: newer Chrome returns a Promise from scrollIntoView, and React would treat a returned value as the effect's cleanup.
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [chat?.items, busy]);
   useEffect(() => () => abort.current?.abort(), []);
 
   const send = async (text: string) => {
