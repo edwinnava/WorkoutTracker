@@ -463,7 +463,8 @@ async function readStream(res: Response, onText: (soFar: string) => void): Promi
       onText(turn.content);
     }
     for (const tc of choice.delta?.tool_calls ?? []) {
-      const i = tc.index ?? turn.toolCalls.length - 1;
+      // Servers that leave out `index` start a new call whenever they send an id.
+      const i = tc.index ?? Math.max(0, tc.id ? turn.toolCalls.length : turn.toolCalls.length - 1);
       const cur = (turn.toolCalls[i] ??= { id: '', type: 'function', function: { name: '', arguments: '' } });
       if (tc.id) cur.id = tc.id;
       if (tc.function?.name) cur.function.name += tc.function.name;

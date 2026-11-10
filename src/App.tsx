@@ -4,6 +4,7 @@ import { useActive, useNow, useToastHost } from './lib/hooks';
 import { fmtDuration } from './lib/units';
 import { activeElapsedMs } from './lib/actions';
 import { IconDumbbell, IconHistory, IconHome, IconList, IconUser } from './components/Icons';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Home from './pages/Home';
 import History from './pages/History';
 import WorkoutDetail from './pages/WorkoutDetail';
@@ -70,9 +71,11 @@ function Shell() {
         <Route
           path="/coach"
           element={
-            <Suspense fallback={null}>
-              <Coach />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={null}>
+                <Coach />
+              </Suspense>
+            </ErrorBoundary>
           }
         />
         <Route path="*" element={<Home />} />
@@ -99,8 +102,10 @@ function Shell() {
 
 export default function App() {
   return (
-    <HashRouter>
-      <Shell />
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <Shell />
+      </HashRouter>
+    </ErrorBoundary>
   );
 }

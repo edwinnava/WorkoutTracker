@@ -147,10 +147,15 @@ export default function Coach() {
     setBusy(true);
     abort.current = new AbortController();
     try {
-      const done = await sendMessage(chat ?? (await newChat()), t, setChat, abort.current.signal);
+      const start = chat?.snapshot ? chat : { ...(await newChat()), items: chat?.items ?? [] };
+      const done = await sendMessage(start, t, setChat, abort.current.signal);
       saveChat(done);
       // Nothing was kept from a failed message: put the text back so it's easy to retry.
       if (done.items.at(-1)?.kind === 'error') setInput(t);
+    } catch (e) {
+      // Anything unexpected (e.g. while gathering your training data) is shown rather than swallowed.
+      setChat((c) => ({ snapshot: '', messages: [], updatedAt: Date.now(), ...c, items: [...(c?.items ?? []), { kind: 'error', text: `Something went wrong: ${e instanceof Error ? e.message : String(e)}` }] }));
+      setInput(t);
     } finally {
       setBusy(false);
     }
