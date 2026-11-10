@@ -8,7 +8,7 @@ import { useExerciseMap, useExercises, useSettings, useWorkouts } from '../lib/h
 import { startOfDay, startOfWeek, weekStreak, workoutVolume } from '../lib/stats';
 import { suggestToday } from '../lib/suggest';
 import { fmtLongDuration, fmtVolume } from '../lib/units';
-import { IconCalendar, IconPlay, IconPlus, IconSparkle } from '../components/Icons';
+import { IconCalendar, IconChat, IconPlay, IconPlus, IconSparkle } from '../components/Icons';
 import { WorkoutCard } from './History';
 import { SignInButton, SyncBadge } from '../components/AccountCard';
 import { useAccount } from '../sync/state';
@@ -81,6 +81,9 @@ export default function Home() {
           <h1>{greeting}</h1>
         </div>
         <SyncBadge />
+        <Link to="/coach" className="btn sm coach-link" aria-label="Open coach chat">
+          <IconChat size={17} /> Coach
+        </Link>
       </div>
 
       {account.configured && account.ready && !account.user && (workouts?.length ?? 0) > 0 && (

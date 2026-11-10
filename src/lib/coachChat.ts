@@ -1,0 +1,473 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { db, getSettings, newId, saveSettings } from '../db/db';
+import type { BodyArea, Exercise, Routine, Settings, Workout, WorkoutFeedback } from '../db/types';
+import { MUSCLE_LABELS } from '../data/exercises';
+import { AREA_LABELS, muscleStats, recentAreas } from './coach';
+import { incrementFor } from './increments';
+import { fmtNum, fmtWeight, fromDisplayWeight } from './units';
+
+/*
+ * The coach chat: Claude with tools that read and change the app's data.
+ * Requests go straight from the browser to the Claude API with the user's own
+ * API key, which is kept in localStorage on this device only (never synced).
+ */
+
+const MODEL = 'claude-opus-5-5';
+const KEY_STORE = 'anthropicKey';
+const CHAT_STORE = 'coachChat';
+/** A stored chat older than this starts fresh, so the coach isn't working from stale numbers. */
+const CHAT_MAX_AGE_MS = 6 * 3600000;
+const DAY = 86400000;
+const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+
+export const getApiKey = () => localStorage.getItem(KEY_STORE) ?? '';
+export const setApiKey = (key: string) => (key.trim() ? localStorage.setItem(KEY_STORE, key.trim()) : localStorage.removeItem(KEY_STORE));
+
+type MessageParam = Anthropic.Beta.BetaMessageParam;
+
+/** How to reverse a change the coach made. */
+export type Undo =
+  | { kind: 'routine'; id: string; prev: Routine | null }
+  | { kind: 'settings'; prev: Partial<Settings> }
+  | { kind: 'feedback'; workoutId: number; prev: WorkoutFeedback | null };
+
+/** What the chat screen shows. */
+export type ChatItem =
+  | { kind: 'user'; text: string }
+  | { kind: 'assistant'; text: string }
+  | { kind: 'action'; text: string; undo?: Undo; undone?: boolean }
+  | { kind: 'error'; text: string };
+
+export interface ChatState {
+  /** Snapshot of the user's training, built when the chat started (kept fixed so the prompt stays cacheable). */
+  snapshot: string;
+  messages: MessageParam[];
+  items: ChatItem[];
+  updatedAt: number;
+}
+
+export function loadChat(): ChatState | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(CHAT_STORE) ?? 'null') as ChatState | null;
+    return s && Date.now() - s.updatedAt < CHAT_MAX_AGE_MS ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveChat(s: ChatState | null) {
+  if (!s) return localStorage.removeItem(CHAT_STORE);
+  try {
+    localStorage.setItem(CHAT_STORE, JSON.stringify(s));
+  } catch {
+    /* storage full: the chat just won't survive a reload */
+  }
+}
+
+/* ---------- What the coach knows up front ---------- */
+
+const SYSTEM = `You are the strength coach built into a personal workout-tracker app. You are talking with the app's only user, in a chat screen on their phone. They lift for general strength and muscle and are not a developer.
+
+You can see their training data and you can change things in the app with your tools. They asked for a coach that updates the app for them, so when they ask for a change or agree to one you suggested, make it with a tool straight away rather than describing how they could do it themselves. When a change is your own idea and it is a big one (rewriting a routine, moving their schedule), say what you would change and why in a sentence or two and check they want it first. Small adjustments they clearly asked for need no confirmation. Every change shows up in the chat with an Undo button, so after making one, say plainly what you changed in a line or two.
+
+How the app works, so your advice fits it:
+- Each exercise in a routine has a rep range. The app suggests weights by double progression: one more rep per set until every set reaches the top of the range, then the weight goes up by that exercise's "weight jump" and reps drop back to the bottom. If someone goes well past the top it jumps further. Three sessions stuck at the same weight triggers a roughly 10% deload.
+- After a workout they can mark it as "went light" or flag a body area that was bothering them. Flagged sessions are left out of progression, and for 10 days exercises loading a flagged area hold their weight.
+- The app picks today's workout from: a routine they picked for today, else the weekly schedule, else the next routine in rotation.
+
+The first message of the chat carries a snapshot of their data taken when the chat began. For anything not in it, or after you have changed something, use the read tools instead of guessing. Exercise ids must come from the snapshot or from search_exercises; never invent one. Weights are in the unit the snapshot states.
+
+Base what you say on their actual numbers and name them ("your bench has gone 155, 160, 165 over three weeks"). If the data cannot answer a question, say so. You are not a doctor: for pain, suggest easing off and getting it looked at if it persists, and use add_workout_feedback so the app eases off too.
+
+Write for a phone: short replies, plain language, no headings or tables. Short paragraphs, with "- " bullets for lists and **bold** only for the few numbers or names that matter.`;
+
+function fmtSets(sets: Workout['exercises'][number]['sets'], unit: Settings['unit']): string {
+  return sets
+    .filter((s) => s.type !== 'warmup')
+    .map((s) => (s.weightKg != null ? `${fmtWeight(s.weightKg, unit)}x${s.reps ?? '?'}` : s.reps != null ? `${s.reps} reps` : s.durationSec != null ? `${s.durationSec}s` : '?'))
+    .join(', ');
+}
+
+function describeRoutine(r: Routine, exMap: Map<string, Exercise>): string {
+  const lines = r.exercises.map((e) => {
+    const working = e.sets.filter((s) => s.type !== 'warmup');
+    const t = working.find((s) => s.reps != null);
+    const range = t?.reps != null ? (t.repsMax && t.repsMax !== t.reps ? `${t.reps}-${t.repsMax}` : `${t.reps}`) : 'no rep target';
+    return `  - ${exMap.get(e.exerciseId)?.name ?? e.exerciseId} [${e.exerciseId}]: ${working.length} sets, ${range} reps`;
+  });
+  return `${r.name} [routine id: ${r.id}]\n${lines.join('\n') || '  (empty)'}`;
+}
+
+function describeWorkout(w: Workout, exMap: Map<string, Exercise>, unit: Settings['unit']): string {
+  const f = w.feedback;
+  const tags = [f?.light ? 'went light' : '', ...(f?.areas ?? []).map((a) => `${AREA_LABELS[a].toLowerCase()} bothering`), f?.note ? `note: "${f.note}"` : ''].filter(Boolean);
+  const head = `${new Date(w.startTime).toDateString()} — ${w.title} [workout id: ${w.id}], ${Math.round((w.endTime - w.startTime) / 60000)} min${tags.length ? ` (${tags.join('; ')})` : ''}`;
+  const lines = w.exercises.map((e) => `  - ${exMap.get(e.exerciseId)?.name ?? e.exerciseId}: ${fmtSets(e.sets, unit)}${e.notes ? ` (note: "${e.notes}")` : ''}`);
+  return `${head}\n${lines.join('\n')}`;
+}
+
+/** Plain-text picture of the user's training for the start of a chat. */
+export async function buildSnapshot(now = Date.now()): Promise<string> {
+  const [settings, routines, exercises, workouts] = await Promise.all([
+    getSettings(),
+    db.routines.orderBy('order').toArray(),
+    db.exercises.toArray(),
+    db.workouts.orderBy('startTime').reverse().toArray(),
+  ]);
+  const exMap = new Map(exercises.map((e) => [e.id, e]));
+  const unit = settings.unit;
+  const name = (id: string | null) => (id === 'rest' ? 'Rest' : id ? (routines.find((r) => r.id === id)?.name ?? 'unknown') : 'Auto (rotation)');
+  const stats = muscleStats(workouts, exMap, now);
+  const caution = recentAreas(workouts, now);
+
+  // Trend for every exercise in a routine: top set of the last few sessions.
+  const inRoutines = [...new Set(routines.flatMap((r) => r.exercises.map((e) => e.exerciseId)))];
+  const trends = inRoutines.map((id) => {
+    const sessions = workouts.filter((w) => w.exerciseIds.includes(id)).slice(0, 5);
+    const ex = exMap.get(id);
+    const tops = sessions
+      .map((w) => {
+        const sets = w.exercises.filter((e) => e.exerciseId === id).flatMap((e) => e.sets).filter((s) => s.type !== 'warmup');
+        const top = sets.reduce((a, s) => ((s.weightKg ?? 0) > (a?.weightKg ?? -1) ? s : a), sets[0]);
+        const d = new Date(w.startTime);
+        return top ? `${d.getMonth() + 1}/${d.getDate()}: ${fmtSets(sets, unit)}` : '';
+      })
+      .filter(Boolean);
+    return `- ${ex?.name ?? id} [${id}] (weight jump ${fmtNum(incrementFor(ex, settings))} ${unit}): ${tops.length ? tops.join(' | ') : 'never logged'}`;
+  });
+
+  return [
+    `Today is ${new Date(now).toDateString()}. Weights are in ${unit}. ${workouts.length} workouts logged in total.`,
+    `ROUTINES\n${routines.map((r) => describeRoutine(r, exMap)).join('\n') || '(none yet)'}`,
+    `WEEKLY SCHEDULE\n${DAYS.map((d, i) => `${d}: ${name(settings.schedule[i])}`).join(', ')}`,
+    `MUSCLE BALANCE (working sets per week over the last 4 weeks, vs the app's target)\n${stats.map((s) => `- ${MUSCLE_LABELS[s.muscle]}: ${Math.round(s.weekly * 2) / 2} of ${s.target}${s.daysSince != null ? `, last trained ${s.daysSince} days ago` : ', never trained'}`).join('\n')}`,
+    `AREAS FLAGGED IN THE LAST 10 DAYS\n${caution.map((c) => `- ${AREA_LABELS[c.area]} (${Math.floor((now - c.at) / DAY)} days ago)`).join('\n') || '(none)'}`,
+    `RECENT SESSIONS PER EXERCISE (newest first, working sets as weight x reps)\n${trends.join('\n') || '(no routines)'}`,
+    `LAST ${Math.min(workouts.length, 8)} WORKOUTS (newest first)\n${workouts.slice(0, 8).map((w) => describeWorkout(w, exMap, unit)).join('\n') || '(none yet)'}`,
+  ].join('\n\n');
+}
+
+/* ---------- Tools ---------- */
+
+const str = { type: 'string' } as const;
+const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]): Anthropic.Beta.BetaTool => ({
+  name,
+  description,
+  eager_input_streaming: true,
+  input_schema: { type: 'object', properties, required },
+});
+
+const TOOLS: Anthropic.Beta.BetaTool[] = [
+  tool('search_exercises', "Search the app's exercise library by name to get exercise ids. Returns up to 15 matches with muscle, equipment and whether the user has logged it before.", { query: { ...str, description: 'Part of the exercise name, e.g. "incline press" or "leg curl"' } }, ['query']),
+  tool('get_exercise_history', 'Every working set from the most recent sessions of one exercise, newest first.', { exercise_id: str, sessions: { type: 'integer', description: 'How many sessions (default 8, max 30)' } }, ['exercise_id']),
+  tool('get_recent_workouts', 'Full detail of recent workouts, newest first, including feedback and notes. Use for anything older or more detailed than the snapshot.', { count: { type: 'integer', description: 'How many workouts (default 10, max 40)' } }, []),
+  tool('get_routines', "The user's routines and weekly schedule as they are right now. Use after changing something or if the snapshot may be out of date.", {}, []),
+  tool(
+    'save_routine',
+    'Create a routine, or replace an existing one when routine_id is given. Replacing overwrites the whole exercise list, so include every exercise that should remain.',
+    {
+      routine_id: { ...str, description: 'Id of the routine to replace. Omit to create a new one.' },
+      name: str,
+      exercises: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            exercise_id: str,
+            sets: { type: 'integer', description: 'Working sets, 1-10' },
+            reps_min: { type: 'integer', description: 'Bottom of the rep range' },
+            reps_max: { type: 'integer', description: 'Top of the rep range' },
+            rest_seconds: { type: 'integer', description: 'Rest between sets. Omit for the user default.' },
+          },
+          required: ['exercise_id', 'sets', 'reps_min', 'reps_max'],
+        },
+      },
+    },
+    ['name', 'exercises'],
+  ),
+  tool(
+    'set_weekly_schedule',
+    'Set which routine is planned for one or more weekdays. Only the days you include change.',
+    { days: { type: 'object', description: 'Keys are sun, mon, tue, wed, thu, fri, sat. Each value is a routine id, "rest", or "auto" (no fixed plan: the app rotates through the routines).', properties: Object.fromEntries(DAYS.map((d) => [d, str])) } },
+    ['days'],
+  ),
+  tool('set_weight_jump', "Set how much weight the app adds to one exercise when it progresses, in the user's unit. Use for machines with fixed steps (e.g. an 11 lb cable stack).", { exercise_id: str, amount: { type: ['number', 'null'], description: 'The jump, or null to go back to automatic' } }, ['exercise_id', 'amount']),
+  tool('plan_today', "Choose what the app offers as today's workout: a routine id, or \"rest\".", { routine_id: str }, ['routine_id']),
+  tool(
+    'add_workout_feedback',
+    "Record how a finished workout went, so the app's suggestions adjust: went_light keeps it out of progression, and areas makes the app hold weights on exercises that load them for 10 days.",
+    {
+      workout_id: { type: 'integer' },
+      went_light: { type: 'boolean' },
+      areas: { type: 'array', items: { type: 'string', enum: Object.keys(AREA_LABELS) }, description: 'Body areas that were bothering them. Replaces the current list.' },
+      note: str,
+    },
+    ['workout_id'],
+  ),
+];
+
+interface ToolOutcome {
+  content: string;
+  isError?: boolean;
+  /** Shown in the chat when the tool changed something. */
+  action?: { text: string; undo?: Undo };
+}
+
+const fail = (content: string): ToolOutcome => ({ content, isError: true });
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const int = (v: unknown, min: number, max: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null);
+
+/** Runs one tool call. Inputs come from the model unvalidated, so everything is checked here. */
+export async function runTool(name: string, input: unknown): Promise<ToolOutcome> {
+  if (!isObj(input)) return fail('Input must be an object.');
+  const settings = await getSettings();
+  const unit = settings.unit;
+
+  switch (name) {
+    case 'search_exercises': {
+      if (typeof input.query !== 'string' || !input.query.trim()) return fail('query is required.');
+      const terms = input.query.toLowerCase().split(/\s+/).filter(Boolean);
+      const all = await db.exercises.toArray();
+      const hits = all.filter((e) => terms.every((t) => e.name.toLowerCase().includes(t))).slice(0, 15);
+      if (!hits.length) return { content: 'No exercises match. Try fewer or different words.' };
+      const done = await Promise.all(hits.map((e) => db.workouts.where('exerciseIds').equals(e.id).count()));
+      return { content: hits.map((e, i) => `${e.name} [${e.id}] — ${MUSCLE_LABELS[e.muscle]}, ${e.equipment}, ${done[i] ? `logged in ${done[i]} workouts` : 'never logged'}`).join('\n') };
+    }
+    case 'get_exercise_history': {
+      const ex = typeof input.exercise_id === 'string' ? await db.exercises.get(input.exercise_id) : undefined;
+      if (!ex) return fail('Unknown exercise_id. Use search_exercises to find it.');
+      const n = input.sessions === undefined ? 8 : int(input.sessions, 1, 30);
+      if (n == null) return fail('sessions must be a whole number from 1 to 30.');
+      const list = (await db.workouts.where('exerciseIds').equals(ex.id).toArray()).sort((a, b) => b.startTime - a.startTime).slice(0, n);
+      if (!list.length) return { content: `${ex.name} has never been logged.` };
+      return {
+        content: `${ex.name}, weights in ${unit}:\n${list
+          .map((w) => {
+            const f = w.feedback;
+            const flag = f?.light || f?.areas?.length ? ' (flagged: light / something bothering)' : '';
+            return `${new Date(w.startTime).toDateString()}${flag}: ${fmtSets(w.exercises.filter((e) => e.exerciseId === ex.id).flatMap((e) => e.sets), unit)}`;
+          })
+          .join('\n')}`,
+      };
+    }
+    case 'get_recent_workouts': {
+      const n = input.count === undefined ? 10 : int(input.count, 1, 40);
+      if (n == null) return fail('count must be a whole number from 1 to 40.');
+      const [list, exercises] = await Promise.all([db.workouts.orderBy('startTime').reverse().limit(n).toArray(), db.exercises.toArray()]);
+      const exMap = new Map(exercises.map((e) => [e.id, e]));
+      return { content: list.map((w) => describeWorkout(w, exMap, unit)).join('\n') || 'No workouts logged yet.' };
+    }
+    case 'get_routines': {
+      const [routines, exercises] = await Promise.all([db.routines.orderBy('order').toArray(), db.exercises.toArray()]);
+      const exMap = new Map(exercises.map((e) => [e.id, e]));
+      const sched = DAYS.map((d, i) => `${d}: ${settings.schedule[i] ?? 'auto'}`).join(', ');
+      return { content: `${routines.map((r) => describeRoutine(r, exMap)).join('\n') || '(no routines)'}\n\nSchedule (routine ids): ${sched}` };
+    }
+    case 'save_routine': {
+      if (typeof input.name !== 'string' || !input.name.trim()) return fail('name is required.');
+      if (!Array.isArray(input.exercises) || input.exercises.length === 0 || input.exercises.length > 20) return fail('exercises must list 1 to 20 exercises.');
+      const prev = input.routine_id === undefined ? null : typeof input.routine_id === 'string' ? ((await db.routines.get(input.routine_id)) ?? null) : null;
+      if (input.routine_id !== undefined && !prev) return fail('Unknown routine_id. Omit it to create a new routine.');
+      const exercises: Routine['exercises'] = [];
+      for (const [i, raw] of input.exercises.entries()) {
+        if (!isObj(raw)) return fail(`exercises[${i}] must be an object.`);
+        const ex = typeof raw.exercise_id === 'string' ? await db.exercises.get(raw.exercise_id) : undefined;
+        if (!ex) return fail(`exercises[${i}]: unknown exercise_id ${JSON.stringify(raw.exercise_id)}. Use search_exercises to find the id.`);
+        const sets = int(raw.sets, 1, 10);
+        const min = int(raw.reps_min, 1, 100);
+        const max = int(raw.reps_max, 1, 100);
+        if (sets == null || min == null || max == null || max < min) return fail(`exercises[${i}] (${ex.name}): sets must be 1-10 and reps_min <= reps_max, both 1-100.`);
+        const rest = raw.rest_seconds === undefined ? null : int(raw.rest_seconds, 0, 900);
+        if (raw.rest_seconds !== undefined && rest == null) return fail(`exercises[${i}]: rest_seconds must be 0-900.`);
+        // Keep the old entry's notes/superset when the exercise is staying in the routine.
+        const old = prev?.exercises.find((e) => e.exerciseId === ex.id);
+        exercises.push({
+          exerciseId: ex.id,
+          ...(old?.notes ? { notes: old.notes } : {}),
+          restSec: rest ?? old?.restSec ?? settings.defaultRestSec,
+          sets: Array.from({ length: sets }, () => ({ type: 'normal' as const, reps: min, repsMax: max })),
+        });
+      }
+      const routine: Routine = prev
+        ? { ...prev, name: input.name.trim(), exercises }
+        : { id: newId('r-'), name: input.name.trim(), order: await db.routines.count(), createdAt: Date.now(), exercises };
+      await db.routines.put(routine);
+      return {
+        content: `Saved. Routine id: ${routine.id}`,
+        action: { text: prev ? `Updated routine “${routine.name}”` : `Created routine “${routine.name}”`, undo: { kind: 'routine', id: routine.id, prev } },
+      };
+    }
+    case 'set_weekly_schedule': {
+      if (!isObj(input.days) || Object.keys(input.days).length === 0) return fail('days must set at least one weekday.');
+      const routines = await db.routines.toArray();
+      const schedule = [...settings.schedule];
+      const said: string[] = [];
+      for (const [day, value] of Object.entries(input.days)) {
+        const i = DAYS.indexOf(day as (typeof DAYS)[number]);
+        if (i < 0) return fail(`Unknown day "${day}". Use sun, mon, tue, wed, thu, fri, sat.`);
+        const r = routines.find((x) => x.id === value);
+        if (value !== 'rest' && value !== 'auto' && !r) return fail(`${day}: "${String(value)}" is not a routine id, "rest" or "auto".`);
+        schedule[i] = value === 'auto' ? null : (value as string);
+        said.push(`${day[0].toUpperCase()}${day.slice(1)} → ${r?.name ?? (value === 'rest' ? 'Rest' : 'Auto')}`);
+      }
+      await saveSettings({ schedule });
+      return { content: 'Schedule saved.', action: { text: `Schedule: ${said.join(', ')}`, undo: { kind: 'settings', prev: { schedule: settings.schedule } } } };
+    }
+    case 'set_weight_jump': {
+      const ex = typeof input.exercise_id === 'string' ? await db.exercises.get(input.exercise_id) : undefined;
+      if (!ex) return fail('Unknown exercise_id. Use search_exercises to find it.');
+      const amount = input.amount;
+      if (amount !== null && (typeof amount !== 'number' || !(amount > 0) || amount > 200)) return fail('amount must be a positive number, or null for automatic.');
+      const increments = { ...settings.increments };
+      if (amount === null) delete increments[ex.id];
+      else increments[ex.id] = fromDisplayWeight(amount, unit);
+      await saveSettings({ increments });
+      return {
+        content: 'Saved.',
+        action: { text: amount === null ? `${ex.name}: weight jump back to automatic` : `${ex.name}: weight jump set to ${fmtNum(amount)} ${unit}`, undo: { kind: 'settings', prev: { increments: settings.increments } } },
+      };
+    }
+    case 'plan_today': {
+      const r = typeof input.routine_id === 'string' && input.routine_id !== 'rest' ? await db.routines.get(input.routine_id) : undefined;
+      if (input.routine_id !== 'rest' && !r) return fail('routine_id must be a routine id or "rest".');
+      await saveSettings({ nextPick: { routineId: r?.id ?? 'rest', at: Date.now() }, todayPlan: null });
+      return { content: 'Saved.', action: { text: r ? `Today’s workout set to “${r.name}”` : 'Today set as a rest day', undo: { kind: 'settings', prev: { nextPick: settings.nextPick, todayPlan: settings.todayPlan } } } };
+    }
+    case 'add_workout_feedback': {
+      const w = typeof input.workout_id === 'number' ? await db.workouts.get(input.workout_id) : undefined;
+      if (!w) return fail('Unknown workout_id. Workout ids are in the snapshot and in get_recent_workouts.');
+      if (input.went_light !== undefined && typeof input.went_light !== 'boolean') return fail('went_light must be true or false.');
+      if (input.note !== undefined && typeof input.note !== 'string') return fail('note must be text.');
+      const valid = Object.keys(AREA_LABELS);
+      if (input.areas !== undefined && (!Array.isArray(input.areas) || input.areas.some((a) => !valid.includes(a as string)))) return fail(`areas must be a list from: ${valid.join(', ')}.`);
+      const next: WorkoutFeedback = { ...w.feedback };
+      if (input.went_light !== undefined) next.light = input.went_light || undefined;
+      if (input.areas !== undefined) next.areas = (input.areas as BodyArea[]).length ? (input.areas as BodyArea[]) : undefined;
+      if (input.note !== undefined) next.note = (input.note as string).trim() || undefined;
+      const feedback = next.light || next.areas || next.note ? next : undefined;
+      await db.workouts.update(w.id!, { feedback });
+      const tags = [next.light ? 'went light' : '', ...(next.areas ?? []).map((a) => AREA_LABELS[a].toLowerCase())].filter(Boolean);
+      return {
+        content: 'Saved.',
+        action: { text: `Feedback on ${w.title} (${new Date(w.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}): ${tags.join(', ') || 'note saved'}`, undo: { kind: 'feedback', workoutId: w.id!, prev: w.feedback ?? null } },
+      };
+    }
+    default:
+      return fail(`Unknown tool ${name}.`);
+  }
+}
+
+export async function applyUndo(u: Undo): Promise<void> {
+  if (u.kind === 'routine') {
+    if (u.prev) await db.routines.put(u.prev);
+    else await db.routines.delete(u.id);
+  } else if (u.kind === 'settings') await saveSettings(u.prev);
+  else await db.workouts.update(u.workoutId, { feedback: u.prev ?? undefined });
+}
+
+/* ---------- Talking to Claude ---------- */
+
+/** Turns an API failure into something the user can act on. */
+export function explainError(err: unknown): string {
+  if (err instanceof Anthropic.AuthenticationError) return 'Claude didn’t accept that API key. Check it in Coach settings (the key icon).';
+  if (err instanceof Anthropic.PermissionDeniedError) return 'That API key isn’t allowed to use this model. Check the key’s permissions in the Anthropic Console.';
+  if (err instanceof Anthropic.RateLimitError) return 'Too many requests right now. Wait a minute and try again.';
+  if (err instanceof Anthropic.BadRequestError) {
+    return /credit balance/i.test(err.message) ? 'Your Anthropic account is out of credit. Add credit in the Anthropic Console (Billing), then try again.' : `Claude rejected the request: ${err.message}`;
+  }
+  if (err instanceof Anthropic.APIConnectionError) return 'Couldn’t reach Claude. Check your internet connection and try again.';
+  if (err instanceof Anthropic.APIError) return `Claude had a problem (${err.status ?? 'error'}). Try again in a moment.`;
+  return err instanceof Error ? err.message : 'Something went wrong.';
+}
+
+export async function newChat(): Promise<ChatState> {
+  return { snapshot: await buildSnapshot(), messages: [], items: [], updatedAt: Date.now() };
+}
+
+/**
+ * Sends the user's message and runs Claude's tool calls until it has finished
+ * replying. `onChange` fires as text streams in and as actions happen.
+ * Returns the new state; on failure the state carries an error item and the
+ * conversation is rolled back to before this message so it can be retried.
+ */
+export async function sendMessage(state: ChatState, text: string, onChange: (s: ChatState) => void, signal?: AbortSignal): Promise<ChatState> {
+  const client = new Anthropic({ apiKey: getApiKey(), dangerouslyAllowBrowser: true });
+  const before = state.messages;
+  // The snapshot rides in the first user message so the conversation prefix never changes.
+  const content = before.length === 0 ? `<training_snapshot>\n${state.snapshot}\n</training_snapshot>\n\n${text}` : text;
+  let messages: MessageParam[] = [...before, { role: 'user', content }];
+  let items: ChatItem[] = [...state.items.filter((i) => i.kind !== 'error'), { kind: 'user', text }];
+  const emit = (extra: ChatItem[] = []) => onChange({ ...state, messages, items: [...items, ...extra], updatedAt: Date.now() });
+  emit();
+
+  try {
+    let jsonRetries = 0;
+    for (let step = 0; step < 12; step++) {
+      const stream = client.beta.messages.stream(
+        {
+          model: MODEL,
+          max_tokens: 16000,
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          output_config: { effort: 'medium' },
+          cache_control: { type: 'ephemeral' },
+          system: SYSTEM,
+          tools: TOOLS,
+          messages,
+        },
+        { signal },
+      );
+      let live = '';
+      stream.on('text', (delta) => {
+        live += delta;
+        emit([{ kind: 'assistant', text: live }]);
+      });
+
+      let message: Anthropic.Beta.BetaMessage;
+      try {
+        message = await stream.finalMessage();
+        jsonRetries = 0;
+      } catch (err) {
+        // With eager input streaming, a tool input that isn't parseable JSON rejects here: re-issue the turn.
+        if (err instanceof Anthropic.APIError || signal?.aborted || jsonRetries++ >= 2) throw err;
+        continue;
+      }
+
+      const said = message.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n\n').trim();
+      if (said) items = [...items, { kind: 'assistant', text: said }];
+
+      if (message.stop_reason === 'refusal') {
+        items = [...items, { kind: 'error', text: 'Claude declined to answer that one. Try rephrasing.' }];
+        messages = before;
+        break;
+      }
+      const toolUses = message.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
+      if (message.stop_reason === 'max_tokens' && toolUses.length) throw new Error('The reply was cut off before a change could be made. Try asking for less at once.');
+
+      // Keep the whole content (thinking blocks included) so the next request is valid.
+      messages = [...messages, { role: 'assistant', content: message.content }];
+      if (message.stop_reason === 'pause_turn') continue;
+      if (!toolUses.length) break;
+
+      const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
+      for (const t of toolUses) {
+        const out = await runTool(t.name, t.input).catch((e): ToolOutcome => fail(`Tool failed: ${e instanceof Error ? e.message : String(e)}`));
+        if (out.action) items = [...items, { kind: 'action', ...out.action }];
+        results.push({ type: 'tool_result', tool_use_id: t.id, content: out.content, ...(out.isError ? { is_error: true } : {}) });
+      }
+      messages = [...messages, { role: 'user', content: results }];
+      emit();
+    }
+  } catch (err) {
+    if (!signal?.aborted) items = [...items, { kind: 'error', text: explainError(err) }];
+    // Drop the half-finished exchange unless tools already changed things the model should know about.
+    if (!items.slice(state.items.length).some((i) => i.kind === 'action')) {
+      messages = before;
+      // Nothing was kept, so take the question back out too (the screen puts it back in the box to retry).
+      items = [...state.items.filter((i) => i.kind !== 'error'), ...items.filter((i) => i.kind === 'error')];
+    }
+  }
+  const done = { ...state, messages, items, updatedAt: Date.now() };
+  onChange(done);
+  return done;
+}

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useActive, useNow, useToastHost } from './lib/hooks';
 import { fmtDuration } from './lib/units';
@@ -12,6 +13,9 @@ import RoutineEditor from './pages/RoutineEditor';
 import Exercises from './pages/Exercises';
 import ExerciseDetail from './pages/ExerciseDetail';
 import Profile from './pages/Profile';
+
+// The coach pulls in the Claude SDK, so it loads only when opened.
+const Coach = lazy(() => import('./pages/Coach'));
 
 const TABS = [
   { to: '/', label: 'Today', icon: IconHome, end: true },
@@ -50,7 +54,7 @@ function ResumeBar() {
 function Shell() {
   const location = useLocation();
   const toast = useToastHost();
-  const hideTabs = location.pathname === '/workout' || location.pathname.startsWith('/routines/');
+  const hideTabs = location.pathname === '/workout' || location.pathname === '/coach' || location.pathname.startsWith('/routines/');
   return (
     <div className="app">
       <Routes>
@@ -63,6 +67,14 @@ function Shell() {
         <Route path="/exercises" element={<Exercises />} />
         <Route path="/exercises/:id" element={<ExerciseDetail />} />
         <Route path="/profile" element={<Profile />} />
+        <Route
+          path="/coach"
+          element={
+            <Suspense fallback={null}>
+              <Coach />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Home />} />
       </Routes>
       {!hideTabs && (
