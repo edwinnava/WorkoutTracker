@@ -1,5 +1,6 @@
 import { db, getSettings, newId, saveSettings } from '../db/db';
-import type { BodyArea, Exercise, Routine, Settings, Workout, WorkoutFeedback } from '../db/types';
+import type { BodyArea, Exercise, MacroProfile, Routine, Settings, Workout, WorkoutFeedback } from '../db/types';
+import { calcMacros, GOALS } from './macros';
 import { MUSCLE_LABELS } from '../data/exercises';
 import { AREA_LABELS, muscleStats, recentAreas } from './coach';
 import { incrementFor } from './increments';
@@ -158,6 +159,12 @@ function describeWorkout(w: Workout, exMap: Map<string, Exercise>, unit: Setting
   return `${head}\n${lines.join('\n')}`;
 }
 
+function macroLine(p: MacroProfile, unit: Settings['unit']): string {
+  const m = calcMacros(p);
+  const goal = GOALS.find((g) => g.id === p.goal)?.label ?? p.goal;
+  return `BODY AND NUTRITION (from the app's macro calculator)\n${p.sex}, ${p.age} years, ${fmtNum(p.heightCm, 0)} cm, ${fmtWeight(p.weightKg, unit)} ${unit}. Goal: ${goal}. Daily targets: ${m.calories} kcal, ${m.protein} g protein, ${m.carbs} g carbs, ${m.fat} g fat (maintenance about ${m.tdee} kcal).`;
+}
+
 /** Plain-text picture of the user's training for the start of a chat. */
 export async function buildSnapshot(now = Date.now()): Promise<string> {
   const [settings, routines, exercises, workouts] = await Promise.all([
@@ -190,6 +197,7 @@ export async function buildSnapshot(now = Date.now()): Promise<string> {
 
   return [
     `Today is ${new Date(now).toDateString()}. Weights are in ${unit}. ${workouts.length} workouts logged in total.`,
+    ...(settings.macros ? [macroLine(settings.macros, unit)] : []),
     `ROUTINES\n${routines.map((r) => describeRoutine(r, exMap)).join('\n') || '(none yet)'}`,
     `WEEKLY SCHEDULE\n${DAYS.map((d, i) => `${d}: ${name(settings.schedule[i])}`).join(', ')}`,
     `MUSCLE BALANCE (working sets per week over the last 4 weeks, vs the app's target)\n${stats.map((s) => `- ${MUSCLE_LABELS[s.muscle]}: ${Math.round(s.weekly * 2) / 2} of ${s.target}${s.daysSince != null ? `, last trained ${s.daysSince} days ago` : ', never trained'}`).join('\n')}`,

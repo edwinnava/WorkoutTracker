@@ -57,7 +57,7 @@ export default function Routines() {
     <div className="page">
       <div className="page-header">
         <h1 className="title">Routines</h1>
-        <Link to="/routines/new" className="btn primary sm">
+        <Link to="/routines/new" className="btn sm">
           <IconPlus size={18} /> New
         </Link>
       </div>
@@ -83,7 +83,7 @@ export default function Routines() {
           <p className="small subtle" style={{ margin: '4px 0 12px' }}>
             {r.exercises.map((e) => exMap.get(e.exerciseId)?.name ?? '').filter(Boolean).join(', ') || 'No exercises'}
           </p>
-          <button className="btn primary block" onClick={() => confirmAndStart(navigate, r)}>
+          <button className="btn block" onClick={() => confirmAndStart(navigate, r)}>
             <IconPlay size={16} /> Start Routine
           </button>
         </div>

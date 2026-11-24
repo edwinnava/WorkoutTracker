@@ -17,7 +17,7 @@ export default function Exercises() {
     <div className="page">
       <div className="page-header">
         <h1 className="title">Exercises</h1>
-        <button className="btn primary sm" onClick={() => setCreating(true)}>
+        <button className="btn sm" onClick={() => setCreating(true)}>
           <IconPlus size={18} /> Custom
         </button>
       </div>

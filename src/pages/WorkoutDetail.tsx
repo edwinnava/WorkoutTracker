@@ -7,7 +7,7 @@ import { toast, useExerciseMap, useSettings } from '../lib/hooks';
 import { countWorkoutPRs, workoutSetCount, workoutVolume } from '../lib/stats';
 import { fmtLongDuration, fmtVolume } from '../lib/units';
 import { ActionMenu } from '../components/Sheet';
-import { IconBack, IconCopy, IconDots, IconEdit, IconList, IconPlay, IconTrash, IconTrophy } from '../components/Icons';
+import { IconBack, IconCheck, IconCopy, IconDots, IconEdit, IconList, IconPlay, IconTrash, IconTrophy } from '../components/Icons';
 import { fmtDate } from './History';
 import { FeedbackCard } from '../components/FeedbackCard';
 import { formatSet, setLabel } from './WorkoutLogger';
@@ -59,8 +59,10 @@ export default function WorkoutDetail() {
       </div>
 
       {justFinished && (
-        <div className="card center" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
-          <div style={{ fontSize: 36 }}>🎉</div>
+        <div className="card center done-card">
+          <div className="done-mark">
+            <IconCheck size={26} />
+          </div>
           <h2>Workout complete!</h2>
           <p className="subtle small" style={{ margin: '6px 0 0' }}>
             That’s workout #{sessionNumber}

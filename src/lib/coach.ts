@@ -233,7 +233,7 @@ export interface Recommendation {
 function reasonFor(s: MuscleStat): string {
   if (s.daysSince == null) return 'Not trained yet';
   const sets = Math.round(s.weekly * 2) / 2;
-  if (s.deficit >= 0.25) return `About ${sets} sets a week — aim for ${s.target}`;
+  if (s.deficit >= 0.25) return `${sets} of ${s.target} sets a week`;
   if (s.daysSince >= 5) return `Not trained in ${s.daysSince} days`;
   return 'Rested and ready';
 }

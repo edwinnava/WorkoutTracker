@@ -7,8 +7,9 @@ import { hasActiveWorkout, routineForToday, startWorkout } from '../lib/actions'
 import { useExerciseMap, useExercises, useSettings, useWorkouts } from '../lib/hooks';
 import { startOfDay, startOfWeek, weekStreak, workoutVolume } from '../lib/stats';
 import { suggestToday } from '../lib/suggest';
+import { calcMacros } from '../lib/macros';
 import { fmtLongDuration, fmtVolume } from '../lib/units';
-import { IconCalendar, IconChat, IconPlay, IconPlus, IconSparkle } from '../components/Icons';
+import { IconCalendar, IconChat, IconPlay, IconPlus } from '../components/Icons';
 import { WorkoutCard } from './History';
 import { SignInButton, SyncBadge } from '../components/AccountCard';
 import { useAccount } from '../sync/state';
@@ -69,6 +70,7 @@ export default function Home() {
     return { label: DAYS[dayIdx][0], plan: plan === 'rest' ? 'Rest' : routine?.name ?? '', done, today: startOfDay(t) === startOfDay(Date.now()) };
   });
 
+  const macros = useMemo(() => (settings.macros ? calcMacros(settings.macros) : null), [settings.macros]);
   const routine = today?.routine;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -95,24 +97,24 @@ export default function Home() {
         </div>
       )}
 
-      <div className="card">
-        <div className="row small" style={{ color: 'var(--accent)', fontWeight: 600 }}>
-          <IconSparkle size={16} /> TODAY’S WORKOUT
-          <div className="spacer" />
-          {(routines?.length ?? 0) > 0 && (
-            <button className="btn ghost sm" style={{ padding: '2px 0' }} onClick={() => setPlanOpen(true)}>
-              <IconCalendar size={16} /> See plan
-            </button>
-          )}
-        </div>
-        <div className="seg" style={{ marginTop: 12 }}>
-          <button className={tab === 'plan' ? 'on' : ''} onClick={() => setTab('plan')}>
-            My plan
+      <div className="section-title row">
+        <span>TODAY’S WORKOUT</span>
+        <div className="spacer" />
+        {(routines?.length ?? 0) > 0 && (
+          <button className="link" onClick={() => setPlanOpen(true)}>
+            See plan
           </button>
-          <button className={tab === 'coach' ? 'on' : ''} onClick={() => setTab('coach')}>
-            Recommended
-          </button>
-        </div>
+        )}
+      </div>
+      <div className="seg">
+        <button className={tab === 'plan' ? 'on' : ''} onClick={() => setTab('plan')}>
+          My plan
+        </button>
+        <button className={tab === 'coach' ? 'on' : ''} onClick={() => setTab('coach')}>
+          Recommended
+        </button>
+      </div>
+      <div className="card today">
         {tab === 'coach' ? (
           workouts && library ? (
             <RecommendedPlan
@@ -127,7 +129,7 @@ export default function Home() {
           <>
         {today?.kind === 'rest' || today?.kind === 'picked-rest' ? (
           <>
-            <h2 style={{ marginTop: 8 }}>Rest day</h2>
+            <h2>Rest day</h2>
             <p className="subtle">
               {today.kind === 'picked-rest' ? 'You chose to rest today.' : 'Recovery is part of the plan.'} Feel like training anyway? Tap{' '}
               <strong>See plan</strong> to pick a workout.
@@ -135,7 +137,7 @@ export default function Home() {
           </>
         ) : routine ? (
           <>
-            <h2 style={{ marginTop: 8 }}>{routine.name}</h2>
+            <h2>{routine.name}</h2>
             <p className="small subtle" style={{ margin: '4px 0 0' }}>
               {today?.kind === 'picked' ? 'You picked this' : today?.kind === 'scheduled' ? 'Scheduled for today' : 'Next in your rotation'} ·{' '}
               {routineForToday(routine, settings.todayPlan).exercises.length} exercises · tap to adjust before you start
@@ -144,11 +146,11 @@ export default function Home() {
           </>
         ) : (
           <>
-            <h2 style={{ marginTop: 8 }}>No plan yet</h2>
+            <h2>No plan yet</h2>
             <p className="subtle small">Create a routine or add a ready-made program and you’ll get a suggested workout every day.</p>
           </>
         )}
-            {doneToday && <p className="small" style={{ color: 'var(--success)', margin: '8px 0 0' }}>✓ You already trained today</p>}
+            {doneToday && <p className="small" style={{ color: 'var(--success)', margin: '10px 0 0' }}>You already trained today</p>}
         <div className="row" style={{ marginTop: 14 }}>
           {routine && today?.kind !== 'rest' && today?.kind !== 'picked-rest' ? (
             <button className="btn primary block" onClick={() => confirmAndStart(navigate, routineForToday(routine, settings.todayPlan))}>
@@ -162,17 +164,17 @@ export default function Home() {
         </div>
           </>
         )}
-        <button className="btn block" style={{ marginTop: 8 }} onClick={() => confirmAndStart(navigate)}>
-          <IconPlus size={18} /> Start Empty Workout
-        </button>
       </div>
+      <button className="btn ghost block" style={{ marginTop: 6 }} onClick={() => confirmAndStart(navigate)}>
+        <IconPlus size={17} /> Start an empty workout
+      </button>
 
       <div className="section-title">This week</div>
       <div className="week">
         {weekDays.map((d, i) => (
           <div key={i} className={'day' + (d.today ? ' today' : '') + (d.done ? ' done' : '')}>
             <div className="d">{d.label}</div>
-            <div className="n subtle">{d.done ? '✓' : d.plan || '·'}</div>
+            <div className="n">{d.plan || '–'}</div>
           </div>
         ))}
       </div>
@@ -190,9 +192,39 @@ export default function Home() {
           <div className="l">Week streak</div>
         </div>
       </div>
-      <div className="small subtle" style={{ marginTop: 6 }}>
-        Volume this week: {fmtVolume(weekVolume, settings.unit)}
+      <div className="small subtle" style={{ margin: '10px 2px 0' }}>
+        {fmtVolume(weekVolume, settings.unit)} lifted this week
       </div>
+
+      {macros && (
+        <>
+          <div className="section-title row">
+            <span>Daily targets</span>
+            <div className="spacer" />
+            <Link to="/macros" className="link">
+              Edit
+            </Link>
+          </div>
+          <Link to="/macros" className="card clickable macro-mini">
+            <div>
+              <div className="v">{macros.calories.toLocaleString()}</div>
+              <div className="l">kcal</div>
+            </div>
+            <div>
+              <div className="v">{macros.protein}g</div>
+              <div className="l">Protein</div>
+            </div>
+            <div>
+              <div className="v">{macros.carbs}g</div>
+              <div className="l">Carbs</div>
+            </div>
+            <div>
+              <div className="v">{macros.fat}g</div>
+              <div className="l">Fat</div>
+            </div>
+          </Link>
+        </>
+      )}
 
       {workouts && workouts.length > 0 && (
         <>
@@ -204,7 +236,7 @@ export default function Home() {
       <div className="section-title row">
         <span>Recent workouts</span>
         <div className="spacer" />
-        <Link to="/history" className="small" style={{ textTransform: 'none', letterSpacing: 0 }}>
+        <Link to="/history" className="link">
           See all
         </Link>
       </div>

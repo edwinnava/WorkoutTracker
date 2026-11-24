@@ -1,6 +1,6 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { useActive, useNow, useToastHost } from './lib/hooks';
+import { useActive, useNow, useSettings, useToastHost } from './lib/hooks';
 import { fmtDuration } from './lib/units';
 import { activeElapsedMs } from './lib/actions';
 import { IconDumbbell, IconHistory, IconHome, IconList, IconUser } from './components/Icons';
@@ -14,6 +14,7 @@ import RoutineEditor from './pages/RoutineEditor';
 import Exercises from './pages/Exercises';
 import ExerciseDetail from './pages/ExerciseDetail';
 import Profile from './pages/Profile';
+import Macros from './pages/Macros';
 
 // The coach chat loads only when opened.
 const Coach = lazy(() => import('./pages/Coach'));
@@ -54,8 +55,12 @@ function ResumeBar() {
 
 function Shell() {
   const location = useLocation();
+  const { accent } = useSettings();
+  useEffect(() => {
+    document.documentElement.dataset.accent = accent;
+  }, [accent]);
   const toast = useToastHost();
-  const hideTabs = location.pathname === '/workout' || location.pathname === '/coach' || location.pathname.startsWith('/routines/');
+  const hideTabs = location.pathname === '/workout' || location.pathname === '/coach' || location.pathname === '/macros' || location.pathname.startsWith('/routines/');
   return (
     <div className="app">
       <Routes>
@@ -68,6 +73,7 @@ function Shell() {
         <Route path="/exercises" element={<Exercises />} />
         <Route path="/exercises/:id" element={<ExerciseDetail />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/macros" element={<Macros />} />
         <Route
           path="/coach"
           element={

@@ -1,13 +1,17 @@
 import { useMemo, useRef, useState } from 'react';
 import { saveSettings } from '../db/db';
-import type { MuscleGroup, Unit } from '../db/types';
+import { Link } from 'react-router-dom';
+import type { Accent, MuscleGroup, Unit } from '../db/types';
+import { calcMacros } from '../lib/macros';
 import { MUSCLE_LABELS } from '../data/exercises';
 import { deleteAllData, downloadFile, exportBackup, exportHevyCsv, importHevyCsv, restoreBackup, type ImportSummary } from '../lib/dataio';
 import { toast, useExerciseMap, useSettings, useWorkouts } from '../lib/hooks';
 import { startOfWeek, weekStreak, workoutVolume } from '../lib/stats';
 import { fmtLongDuration, fmtNum, fmtVolume } from '../lib/units';
 import { BarChart } from '../components/Charts';
-import { IconDownload, IconTrash, IconUpload } from '../components/Icons';
+import { IconChevron, IconDownload, IconTarget, IconTrash, IconUpload } from '../components/Icons';
+
+const ACCENTS: Accent[] = ['lime', 'blue', 'orange', 'violet', 'mono'];
 import { Sheet } from '../components/Sheet';
 import { AccountCard } from '../components/AccountCard';
 import { useAccount } from '../sync/state';
@@ -82,6 +86,7 @@ export default function Profile() {
   };
 
   const stamp = new Date().toISOString().slice(0, 10);
+  const macros = settings.macros ? calcMacros(settings.macros) : null;
 
   return (
     <div className="page">
@@ -142,8 +147,30 @@ export default function Profile() {
         </>
       )}
 
+      <div className="section-title">Nutrition</div>
+      <div className="list">
+        <Link to="/macros" className="list-item">
+          <IconTarget size={20} />
+          <div className="main">
+            Macro calculator
+            <div className="small subtle">
+              {macros ? `${macros.calories.toLocaleString()} kcal · ${macros.protein}g protein · ${macros.carbs}g carbs · ${macros.fat}g fat` : 'Work out your daily calories and macros'}
+            </div>
+          </div>
+          <IconChevron size={18} />
+        </Link>
+      </div>
+
       <div className="section-title">Settings</div>
       <div className="list">
+        <div className="list-item">
+          <div className="main">Accent colour</div>
+          <div className="swatches">
+            {ACCENTS.map((a) => (
+              <button key={a} className={'swatch' + (settings.accent === a ? ' on' : '')} data-accent={a} onClick={() => saveSettings({ accent: a })} aria-label={`${a} accent`} aria-pressed={settings.accent === a} />
+            ))}
+          </div>
+        </div>
         <div className="list-item">
           <div className="main">Weight unit</div>
           <div className="seg" style={{ width: 130 }}>
@@ -195,7 +222,7 @@ export default function Profile() {
           workouts you already have.
         </p>
         <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
-        <button className="btn primary block" disabled={busy} onClick={() => fileRef.current?.click()}>
+        <button className="btn block" disabled={busy} onClick={() => fileRef.current?.click()}>
           <IconUpload size={18} /> {busy ? 'Importing…' : 'Choose Hevy CSV file'}
         </button>
       </div>

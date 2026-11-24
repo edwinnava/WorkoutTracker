@@ -9,7 +9,7 @@ import { usesReps, usesWeight } from '../lib/stats';
 import type { buildDraftExercise } from '../lib/suggest';
 import { startOfDay } from '../lib/stats';
 import { ExercisePicker } from './ExercisePicker';
-import { IconDown, IconPlus, IconShuffle, IconSparkle, IconSwap, IconTrash, IconUp, IconX } from './Icons';
+import { IconDown, IconPlus, IconShuffle, IconSort, IconSparkle, IconSwap, IconTrash, IconUp, IconX } from './Icons';
 import { Sheet } from './Sheet';
 import { ReorderSheet } from './ReorderSheet';
 
@@ -95,12 +95,12 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
 
   return (
     <div style={{ marginTop: 10 }}>
-      <div className="list" style={{ background: 'var(--bg)' }}>
+      <div className="list inset">
         {exercises.map((re, i) => {
           const ex = exMap.get(re.exerciseId);
           const draft = previews?.[i];
           return (
-            <div key={`${re.exerciseId}-${i}`} className="list-item" style={{ padding: '10px 6px 10px 12px', gap: 6 }}>
+            <div key={`${re.exerciseId}-${i}`} className="list-item" style={{ gap: 4 }}>
               <button className="main" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left' }} onClick={() => setEditIdx(i)}>
                 <div className="ellipsis" style={{ fontWeight: 600 }}>
                   {ex?.name ?? re.exerciseId}
@@ -132,7 +132,7 @@ export function TodayPlan({ routine, settings, exMap }: { routine: Routine; sett
         </button>
         {exercises.length > 1 && (
           <button className="btn ghost sm" onClick={() => setReordering(true)}>
-            ⇅ Reorder
+            <IconSort size={16} /> Reorder
           </button>
         )}
         {edited && (

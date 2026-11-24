@@ -100,6 +100,18 @@ export interface Routine {
 
 export type Unit = 'kg' | 'lbs';
 
+/** Body stats and goal for the macro calculator. */
+export interface MacroProfile {
+  sex: 'male' | 'female';
+  age: number;
+  heightCm: number;
+  weightKg: number;
+  activity: 'sedentary' | 'light' | 'moderate' | 'very' | 'extreme';
+  goal: 'cut' | 'lean' | 'maintain' | 'gain' | 'bulk';
+}
+
+export type Accent = 'lime' | 'blue' | 'orange' | 'violet' | 'mono';
+
 export interface Settings {
   unit: Unit;
   defaultRestSec: number;
@@ -120,6 +132,10 @@ export interface Settings {
   plates: Record<Unit, number[]>;
   /** Barbell weight per unit (for the plate calculator). */
   barWeight: Record<Unit, number>;
+  /** Saved macro calculator inputs, or null if never set up. */
+  macros: MacroProfile | null;
+  /** Highlight colour used across the app. */
+  accent: Accent;
 }
 
 /* ---------- In-progress workout (draft) ---------- */

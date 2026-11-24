@@ -22,6 +22,7 @@ import {
   IconPlay,
   IconPlate,
   IconPlus,
+  IconSort,
   IconSparkle,
   IconSwap,
   IconTimer,
@@ -320,8 +321,8 @@ export default function WorkoutLogger() {
           </button>
           <div className="spacer" />
           {w.exercises.length > 1 && (
-            <button className="icon-btn" onClick={() => setReordering(true)} aria-label="Reorder exercises" style={{ fontSize: 20 }}>
-              ⇅
+            <button className="icon-btn" onClick={() => setReordering(true)} aria-label="Reorder exercises">
+              <IconSort size={20} />
             </button>
           )}
           <button className="icon-btn" onClick={() => setDetails(true)} aria-label="Workout details">
@@ -517,23 +518,23 @@ export default function WorkoutLogger() {
               </tbody>
             </table>
             <button className="btn block sm" style={{ marginTop: 8 }} onClick={() => addSet(ex)}>
-              <IconPlus size={16} /> Add Set
+              <IconPlus size={16} /> Add set
             </button>
           </div>
         );
       })}
 
-      <button className="btn primary block" style={{ marginTop: 24 }} onClick={() => setPicker({})}>
-        <IconPlus size={18} /> Add Exercise
+      <button className="btn block" style={{ marginTop: 20 }} onClick={() => setPicker({})}>
+        <IconPlus size={18} /> Add exercise
       </button>
       {w.exercises.length > 1 && (
         <button className="btn block" style={{ marginTop: 10 }} onClick={() => setReordering(true)}>
-          ⇅ Reorder Exercises
+          <IconSort size={18} /> Reorder exercises
         </button>
       )}
       <div className="row" style={{ marginTop: 12 }}>
         <button className="btn danger block" onClick={discard}>
-          {editing ? 'Discard Changes' : 'Discard Workout'}
+          {editing ? 'Discard changes' : 'Discard workout'}
         </button>
       </div>
 

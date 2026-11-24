@@ -243,7 +243,7 @@ export default function RoutineEditor() {
         Tip: set a rep range (e.g. Reps 8, Max reps 12). When you hit the max on every set, the next workout suggests more weight.
         Leave reps empty to base the range on the reps you actually do.
       </p>
-      <button className="btn primary block" style={{ marginTop: 8 }} onClick={() => setPicker({})}>
+      <button className="btn block" style={{ marginTop: 8 }} onClick={() => setPicker({})}>
         <IconPlus size={18} /> Add Exercise
       </button>
 

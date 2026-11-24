@@ -42,7 +42,7 @@ export function SyncBadge() {
   if (!a.online) return <span className="badge warn">Offline · will sync later</span>;
   if (a.status === 'syncing') return <span className="badge accent">Syncing…</span>;
   if (a.status === 'error') return <span className="badge warn" title={a.error}>Sync problem</span>;
-  return <span className="badge success">✓ Synced</span>;
+  return <span className="badge success">Synced</span>;
 }
 
 export function AccountCard() {

@@ -45,3 +45,5 @@ export const IconShuffle = make(<><path d="M3 7h3.5c5 0 6 10 11 10H21l-2.5-2.5M2
 export const IconFlag = make(<><path d="M5 21V4" /><path d="M5 4h11l-2 4 2 4H5" /></>);
 export const IconChat = make(<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4H5.5A1.5 1.5 0 0 1 4 14.5v-9Z" />);
 export const IconSend = make(<path d="M4 12 20 4l-6 16-3-7-7-1Z" />);
+export const IconSort = make(<><path d="M8 5v14M8 5 5 8M8 5l3 3M16 19V5M16 19l-3-3M16 19l3-3" /></>);
+export const IconTarget = make(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></>);

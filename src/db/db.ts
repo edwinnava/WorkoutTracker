@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   schedule: [null, null, null, null, null, null, null],
   plates: DEFAULT_PLATES,
   barWeight: DEFAULT_BAR,
+  macros: null,
+  accent: 'lime',
 };
 
 /** Adds/refreshes built-in exercises. Safe to call on every startup. */

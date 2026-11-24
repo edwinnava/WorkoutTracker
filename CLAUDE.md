@@ -10,7 +10,7 @@ Live at https://edwinnava.github.io/WorkoutTracker/
 
 ## Stack
 
-React 19 + TypeScript + Vite, react-router (HashRouter), Dexie (IndexedDB) for local data, Firebase Auth (Google) + Firestore for sync, PapaParse for CSV, vite-plugin-pwa. No CSS framework; styles are in `src/styles.css` (dark theme, Hevy-like).
+React 19 + TypeScript + Vite, react-router (HashRouter), Dexie (IndexedDB) for local data, Firebase Auth (Google) + Firestore for sync, PapaParse for CSV, vite-plugin-pwa. No CSS framework; styles are in `src/styles.css`: dark only (AMOLED black), minimalist — flat borderless surfaces, hairline dividers, pill buttons, the bundled Inter font (`src/assets/`), and a single accent colour (`settings.accent`, applied as `data-accent` on `<html>`; `--accent`/`--on-accent`). Keep `.btn.primary` for the one main action on a screen.
 
 ## Commands
 
@@ -29,6 +29,7 @@ npx vite preview --port 4173   # serve the build for browser checks
 - `src/lib/suggest.ts`: progressive overload (double progression, auto rep range from history, stall → ~10% deload) and today's-workout logic (plan pick → weekday schedule → rotation). `src/lib/increments.ts`: per-exercise weight jumps.
 - `src/lib/coach.ts`: the in-app "coach" (no server/AI): workout feedback rules (`isOffSession`, `recentAreas`: flagged sessions are skipped in progression history and flagged body areas hold the weight for `CAUTION_DAYS`), muscle balance (`muscleStats`, weekly sets vs `TRACKED` targets), `recommendWorkout` (Today card → Recommended tab) and `mixUpRoutine` ("Mix it up").
 - `src/lib/coachChat.ts` + `src/pages/Coach.tsx` (`/coach`, lazy-loaded): chat with an AI model running on the user's own PC (LM Studio behind Tailscale Serve), via the OpenAI-style `/v1/chat/completions` API with tool calling, straight from the browser with `fetch`. The server address and model live in `localStorage` (`coachServer`, never synced). The user does not want paid API credits, so there is no hosted-API path. The model gets a training snapshot in the first user message and tools (`runTool`) that read data and change routines, schedule, weight jumps, today's pick and workout feedback; every change returns an `Undo`. Tool inputs are validated by hand in `runTool` (local models make mistakes). Browser-test by intercepting the server URL with Playwright and returning scripted SSE.
+- `src/lib/macros.ts` + `src/pages/Macros.tsx` (`/macros`, from Profile and the Today screen): calorie/macro calculator (Mifflin-St Jeor × activity factor, goal as a daily kcal change). Inputs are saved to `settings.macros` (kg/cm) as they're typed.
 - `src/lib/hevy.ts`: Hevy CSV parse/export. `src/lib/dataio.ts`: import into the DB, JSON backup/restore.
 - `src/lib/actions.ts`: start/finish/edit workouts, the draft (active workout) ↔ saved workout conversion, and `routineForToday` (today-only edits from the Today card).
 - `src/sync/`: `engine.ts` is backend-agnostic two-way sync (Dexie hooks → localStorage outbox → remote; remote listeners → local, tombstones for deletes). `firebase.ts` is the Firestore/Auth adapter. `state.ts` holds account state for the UI and lazy-loads Firebase.
@@ -51,7 +52,7 @@ npx vite preview --port 4173   # serve the build for browser checks
 - Unit tests live in `src/**/__tests__` (they use `fake-indexeddb`). The sync engine has an in-memory fake remote.
 - For UI changes, verify in a real browser with Playwright against `vite preview`. Chromium is at `/opt/pw-browsers/chromium`. Install `playwright` in a scratch dir, not in this repo. Use a 390×844 viewport.
 - The real Google sign-in can't be tested in the cloud sandbox, because `apis.google.com` is blocked and so is `github.io`. To test sync end to end, run the Firebase emulators (`npx firebase-tools emulators:start --only auth,firestore --project demo-workout`, needs Java) and build with `VITE_FIREBASE_EMULATOR=1` plus dummy `VITE_FIREBASE_*` values. Emulator builds expose `window.__emulatorGoogleSignIn(uid, email)`.
-- When a Firebase config is present and the user isn't signed in, a "sign in to back up" card appears above the Today card. Scope selectors to the card containing "TODAY’S WORKOUT".
+- When a Firebase config is present and the user isn't signed in, a "sign in to back up" card appears above the Today card. Scope selectors to the Today card (`.card.today`).
 - Shell gotcha: `pkill -f "vite preview"` matches its own shell and kills the command. Use `pkill -f "[v]ite preview"`.
 
 ## Deploy setup (already done)
