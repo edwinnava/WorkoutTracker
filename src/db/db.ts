@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { ActiveWorkout, Exercise, Routine, Settings, Workout } from './types';
+import type { ActiveWorkout, Exercise, FoodEntry, Routine, Settings, Workout } from './types';
 import { BUILT_IN_EXERCISES } from '../data/exercises';
 import { DEFAULT_BAR, DEFAULT_PLATES } from '../lib/plates';
 
@@ -13,6 +13,7 @@ export class WorkoutDB extends Dexie {
   routines!: Table<Routine, string>;
   settings!: Table<SettingsRow, string>;
   active!: Table<ActiveWorkout, string>;
+  foods!: Table<FoodEntry, string>;
 
   constructor(name = 'workout-tracker') {
     super(name);
@@ -32,6 +33,8 @@ export class WorkoutDB extends Dexie {
         await table.clear();
         await table.bulkAdd(all.map((w) => ({ ...w, id: newWorkoutId() })));
       });
+    // v3: food log.
+    this.version(3).stores({ foods: 'id, day' });
     this.workouts.hook('creating', function (primKey, obj) {
       if (primKey == null) {
         obj.id = newWorkoutId();

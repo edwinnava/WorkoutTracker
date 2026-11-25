@@ -5,7 +5,7 @@ import { db, ensureSeed, getSettings, type WorkoutDB } from '../db/db';
 async function deleteAll(table: Table) {
   await table.bulkDelete(await table.toCollection().primaryKeys());
 }
-import type { Exercise, Routine, Settings, Workout } from '../db/types';
+import type { Exercise, FoodEntry, Routine, Settings, Workout } from '../db/types';
 import { parseHevyCsv, planImport, toHevyCsv, workoutKey } from './hevy';
 
 export interface ImportSummary {
@@ -45,6 +45,8 @@ interface Backup {
   exercises: Exercise[];
   workouts: Workout[];
   routines: Routine[];
+  /** Food log (absent in older backups). */
+  foods?: FoodEntry[];
 }
 
 export async function exportBackup(): Promise<string> {
@@ -56,6 +58,7 @@ export async function exportBackup(): Promise<string> {
     exercises: await db.exercises.filter((e) => !!e.custom).toArray(),
     workouts: await db.workouts.toArray(),
     routines: await db.routines.toArray(),
+    foods: await db.foods.toArray(),
   };
   return JSON.stringify(backup);
 }
@@ -63,19 +66,20 @@ export async function exportBackup(): Promise<string> {
 export async function restoreBackup(text: string) {
   const data = JSON.parse(text) as Backup;
   if (data.app !== 'workout-tracker') throw new Error('Not a Workout Tracker backup file.');
-  await db.transaction('rw', [db.exercises, db.workouts, db.routines, db.settings], async () => {
-    await Promise.all([deleteAll(db.workouts), deleteAll(db.routines), deleteAll(db.exercises), deleteAll(db.settings)]);
+  await db.transaction('rw', [db.exercises, db.workouts, db.routines, db.settings, db.foods], async () => {
+    await Promise.all([deleteAll(db.workouts), deleteAll(db.routines), deleteAll(db.exercises), deleteAll(db.settings), deleteAll(db.foods)]);
     await ensureSeed();
     await db.exercises.bulkPut(data.exercises);
     await db.workouts.bulkAdd(data.workouts.map(({ id: _id, ...w }) => w as Workout));
     await db.routines.bulkPut(data.routines);
+    await db.foods.bulkPut(data.foods ?? []);
     await db.settings.put({ ...data.settings, key: 'settings' });
   });
 }
 
 export async function deleteAllData() {
-  await db.transaction('rw', [db.exercises, db.workouts, db.routines, db.settings, db.active], async () => {
-    await Promise.all([deleteAll(db.workouts), deleteAll(db.routines), deleteAll(db.exercises), deleteAll(db.settings), db.active.clear()]);
+  await db.transaction('rw', [db.exercises, db.workouts, db.routines, db.settings, db.active, db.foods], async () => {
+    await Promise.all([deleteAll(db.workouts), deleteAll(db.routines), deleteAll(db.exercises), deleteAll(db.settings), deleteAll(db.foods), db.active.clear()]);
     await ensureSeed();
   });
 }

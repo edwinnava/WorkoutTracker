@@ -3,7 +3,7 @@ import { HashRouter, NavLink, Route, Routes, useLocation, useNavigate } from 're
 import { useActive, useNow, useSettings, useToastHost } from './lib/hooks';
 import { fmtDuration } from './lib/units';
 import { activeElapsedMs } from './lib/actions';
-import { IconDumbbell, IconHistory, IconHome, IconList, IconUser } from './components/Icons';
+import { IconDumbbell, IconFood, IconHistory, IconHome, IconList, IconUser } from './components/Icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Home from './pages/Home';
 import History from './pages/History';
@@ -15,12 +15,14 @@ import Exercises from './pages/Exercises';
 import ExerciseDetail from './pages/ExerciseDetail';
 import Profile from './pages/Profile';
 import Macros from './pages/Macros';
+import Food from './pages/Food';
 
 // The coach chat loads only when opened.
 const Coach = lazy(() => import('./pages/Coach'));
 
 const TABS = [
   { to: '/', label: 'Today', icon: IconHome, end: true },
+  { to: '/food', label: 'Food', icon: IconFood },
   { to: '/history', label: 'History', icon: IconHistory },
   { to: '/routines', label: 'Routines', icon: IconList },
   { to: '/exercises', label: 'Exercises', icon: IconDumbbell },
@@ -74,6 +76,7 @@ function Shell() {
         <Route path="/exercises/:id" element={<ExerciseDetail />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/macros" element={<Macros />} />
+        <Route path="/food" element={<Food />} />
         <Route
           path="/coach"
           element={

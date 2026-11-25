@@ -47,3 +47,6 @@ export const IconChat = make(<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 
 export const IconSend = make(<path d="M4 12 20 4l-6 16-3-7-7-1Z" />);
 export const IconSort = make(<><path d="M8 5v14M8 5 5 8M8 5l3 3M16 19V5M16 19l-3-3M16 19l3-3" /></>);
 export const IconTarget = make(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="0.8" fill="currentColor" /></>);
+export const IconScan = make(<><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path d="M8 9v6M11 9v6M14 9v6M16.5 9v6" strokeWidth={1.6} /></>);
+export const IconCamera = make(<><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9Z" /><circle cx="12" cy="13" r="3.5" /></>);
+export const IconFood = make(<><path d="M12 7.5c-1.6-1.6-4-1.7-5.5-.3C4.6 9 4.800 12.300 6.300 15.200 7.500 17.600 9.200 19.500 10.500 19.500c.600 0 1-.300 1.500-.300s.900.300 1.500.300c1.300 0 3-1.900 4.200-4.300 1.500-2.900 1.700-6.200-.200-8-1.500-1.400-3.900-1.300-5.500.300Z" /><path d="M12 7.500c0-1.700.800-3.200 2.500-4" /></>);

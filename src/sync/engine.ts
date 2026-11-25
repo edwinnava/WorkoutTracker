@@ -15,7 +15,7 @@ import { workoutKey } from '../lib/hevy';
  * The in-progress workout (`active` table) stays local.
  */
 
-export const SYNC_TABLES = ['workouts', 'routines', 'exercises', 'settings'] as const;
+export const SYNC_TABLES = ['workouts', 'routines', 'exercises', 'settings', 'foods'] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];
 type Row = Record<string, unknown>;
 

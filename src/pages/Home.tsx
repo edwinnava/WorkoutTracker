@@ -8,6 +8,7 @@ import { useExerciseMap, useExercises, useSettings, useWorkouts } from '../lib/h
 import { startOfDay, startOfWeek, weekStreak, workoutVolume } from '../lib/stats';
 import { suggestToday } from '../lib/suggest';
 import { calcMacros } from '../lib/macros';
+import { sumEntries } from '../lib/food';
 import { fmtLongDuration, fmtVolume } from '../lib/units';
 import { IconCalendar, IconChat, IconPlay, IconPlus } from '../components/Icons';
 import { WorkoutCard } from './History';
@@ -71,6 +72,8 @@ export default function Home() {
   });
 
   const macros = useMemo(() => (settings.macros ? calcMacros(settings.macros) : null), [settings.macros]);
+  const foods = useLiveQuery(() => db.foods.where('day').equals(startOfDay(Date.now())).toArray(), []);
+  const eaten = useMemo(() => sumEntries(foods ?? []), [foods]);
   const routine = today?.routine;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -196,32 +199,35 @@ export default function Home() {
         {fmtVolume(weekVolume, settings.unit)} lifted this week
       </div>
 
-      {macros && (
+      {(macros || (foods?.length ?? 0) > 0) && (
         <>
           <div className="section-title row">
-            <span>Daily targets</span>
+            <span>Food today</span>
             <div className="spacer" />
             <Link to="/macros" className="link">
-              Edit
+              Targets
             </Link>
           </div>
-          <Link to="/macros" className="card clickable macro-mini">
-            <div>
-              <div className="v">{macros.calories.toLocaleString()}</div>
-              <div className="l">kcal</div>
-            </div>
-            <div>
-              <div className="v">{macros.protein}g</div>
-              <div className="l">Protein</div>
-            </div>
-            <div>
-              <div className="v">{macros.carbs}g</div>
-              <div className="l">Carbs</div>
-            </div>
-            <div>
-              <div className="v">{macros.fat}g</div>
-              <div className="l">Fat</div>
-            </div>
+          <Link to="/food" className="card clickable macro-mini">
+            {(
+              [
+                ['kcal', eaten.kcal, macros?.calories, ''],
+                ['Protein', eaten.protein, macros?.protein, 'g'],
+                ['Carbs', eaten.carbs, macros?.carbs, 'g'],
+                ['Fat', eaten.fat, macros?.fat, 'g'],
+              ] as const
+            ).map(([label, v, t, unit]) => (
+              <div key={label}>
+                <div className="v">
+                  {Math.round(v).toLocaleString()}
+                  {unit}
+                </div>
+                <div className="l">
+                  {t != null ? `of ${t.toLocaleString()}${unit} ` : ''}
+                  {label === 'kcal' ? 'kcal' : label.toLowerCase()}
+                </div>
+              </div>
+            ))}
           </Link>
         </>
       )}

@@ -37,7 +37,7 @@ import type { Remote, RemoteDoc, SyncTable } from './engine';
 import { setAccountState, syncEngine } from './state';
 
 /*
- * Firestore layout: users/{uid}/{workouts|routines|exercises|settings}/{id}
+ * Firestore layout: users/{uid}/{workouts|routines|exercises|settings|foods}/{id}
  *   { data: <record> | null, deleted: boolean, updatedAt: serverTimestamp }
  * Deletes are tombstones so other devices learn about them.
  */

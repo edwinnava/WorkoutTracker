@@ -100,6 +100,32 @@ export interface Routine {
 
 export type Unit = 'kg' | 'lbs';
 
+export interface Nutrition {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+/** One thing eaten, in the food log. */
+export interface FoodEntry {
+  id: string;
+  /** Start of the local day it counts toward (ms). */
+  day: number;
+  /** When it was logged (ms). */
+  at: number;
+  name: string;
+  brand?: string;
+  barcode?: string;
+  /** Nutrition for one unit: 100 g when `unit` is 'g100', otherwise one serving. */
+  per: Nutrition;
+  unit: 'g100' | 'serving';
+  /** Grams eaten ('g100') or number of servings ('serving'). */
+  qty: number;
+  /** Size of the pack's stated serving in grams, when known. */
+  servingGrams?: number;
+}
+
 /** Body stats and goal for the macro calculator. */
 export interface MacroProfile {
   sex: 'male' | 'female';
