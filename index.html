@@ -12,6 +12,48 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Shown only if the app fails to start: the reason, and a way to retry, instead of a blank screen. -->
+    <div id="boot" hidden style="position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:28px;background:#000;color:#f4f4f5;font:15px/1.5 system-ui,sans-serif">
+      <div style="font-size:22px;font-weight:650">Workout Tracker couldn’t start</div>
+      <div id="boot-msg" style="color:#8c8c94"></div>
+      <pre id="boot-detail" style="margin:0;padding:12px;border-radius:12px;background:#1b1b1d;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:40vh;overflow:auto"></pre>
+      <button onclick="location.reload()" style="min-height:48px;border:0;border-radius:999px;background:#f4f4f5;color:#000;font:600 15px system-ui">Try again</button>
+    </div>
+    <script>
+      // Plain script so it still runs when the app's own code doesn't load.
+      (function () {
+        var started = false;
+        // Unless forced, only speaks up while nothing has appeared on screen yet.
+        function show(msg, detail, force) {
+          if (started) return;
+          var boot = document.getElementById('boot');
+          if (!force && document.getElementById('root').childElementCount > 0) return;
+          if (!boot.hidden && !detail && !force) return;
+          document.getElementById('boot-msg').textContent = msg;
+          document.getElementById('boot-detail').textContent = detail || '';
+          document.getElementById('boot-detail').style.display = detail ? '' : 'none';
+          boot.style.display = 'flex';
+          boot.hidden = false;
+        }
+        window.__bootFail = function (msg) {
+          show(msg, '', true);
+        };
+        window.__bootOk = function () {
+          started = true;
+          document.getElementById('boot').remove();
+        };
+        window.addEventListener('error', function (e) {
+          show('Something went wrong while starting. Your data is safe. A screenshot of this page helps get it fixed.', (e.message || 'Error') + (e.filename ? '\n' + e.filename + ':' + e.lineno : ''));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          show('Something went wrong while starting. Your data is safe. A screenshot of this page helps get it fixed.', String((r && (r.stack || r.message)) || r));
+        });
+        setTimeout(function () {
+          show('It’s taking too long to start. If the app is open in another tab or window, close that one, then tap Try again.');
+        }, 10000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -47,6 +47,7 @@ npx vite preview --port 4173   # serve the build for browser checks
 - Only custom exercises sync. Built-ins are re-seeded on every start (`ensureSeed`).
 - Firestore layout is `users/{uid}/{workouts|routines|exercises|settings|foods}/{id}` = `{ data, deleted, updatedAt }`. The security rules are in `firestore.rules`. Firebase project: `edwin-s-workout-trainer`, with web config in `src/firebase-config.ts` (not secret).
 - Adding a Dexie schema change means a new `this.version(n)` with an upgrade function. Never edit an existing version.
+- Start-up must never leave a blank screen: `index.html` has a plain-script fallback page (`#boot`) for load errors and hangs, and `main.tsx` renders after at most 4 s even if the database is slow, reloads on Dexie `versionchange`, and reports `blocked` (an older copy of the app holding the database open during a schema upgrade).
 
 ## Testing notes
 
